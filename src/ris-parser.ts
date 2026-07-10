@@ -57,6 +57,12 @@ function buildItem(tags: Record<string, string[]>): CslItemData {
     ISSN: first(tags, "SN"),
   };
 
+  // PubMed's RIS export carries the PMID in the accession-number tag (AN), a
+  // bare numeric string. Only treat a PMID-shaped AN as one so a non-PubMed
+  // accession isn't misread as a PMID.
+  const accession = first(tags, "AN");
+  if (accession && /^\d{4,9}$/.test(accession)) item.PMID = accession;
+
   const authors = [...(tags["AU"] ?? []), ...(tags["A1"] ?? [])];
   if (authors.length) item.author = authors.map(parseAuthor);
 

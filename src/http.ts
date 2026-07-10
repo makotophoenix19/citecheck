@@ -31,6 +31,16 @@ export function politeMailto(): string | undefined {
   return m && m.includes("@") ? m : undefined;
 }
 
+/**
+ * Optional NCBI E-utilities API key (`CITECHECK_NCBI_API_KEY`). PubMed works
+ * without one at 3 requests/second; a key raises that to 10/second. Never
+ * required — absent, PubMed calls are simply throttled harder.
+ */
+export function ncbiApiKey(): string | undefined {
+  const k = process.env.CITECHECK_NCBI_API_KEY?.trim();
+  return k || undefined;
+}
+
 export function userAgent(): string {
   const mailto = politeMailto();
   return `citecheck/${VERSION} (+${REPO}${mailto ? `; mailto:${mailto}` : ""})`;

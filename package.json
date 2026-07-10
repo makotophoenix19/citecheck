@@ -1,7 +1,7 @@
 {
   "name": "citecheck",
-  "version": "1.3.0",
-  "description": "Check whether the references in your .bib / .ris / CSL-JSON bibliography actually exist and haven't been retracted, and see which sources are in DOAJ-listed open-access journals — using Crossref, OpenAlex and DOAJ. No API key, no signup.",
+  "version": "1.4.0-hm.1",
+  "description": "Check whether the references in your .bib / .ris / CSL-JSON bibliography actually exist and haven't been retracted, and see which sources are in DOAJ-listed open-access journals — using Crossref, PubMed, OpenAlex and DOAJ. No API key, no signup.",
   "type": "module",
   "bin": {
     "citecheck": "dist/cli.js",
@@ -41,6 +41,7 @@
     "references",
     "bibliography",
     "crossref",
+    "pubmed",
     "openalex",
     "doaj",
     "retraction",
@@ -50,13 +51,16 @@
   ],
   "license": "MIT",
   "author": "Tobias Lüscher",
+  "contributors": [
+    "Brady Ware (Houston Methodist, Dept. of Pathology & Genomic Medicine) — PubMed source fork"
+  ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tobiasosDev/citecheck.git"
+    "url": "git+https://github.com/makotophoenix19/citecheck.git"
   },
-  "homepage": "https://github.com/tobiasosDev/citecheck#readme",
+  "homepage": "https://github.com/makotophoenix19/citecheck#readme",
   "bugs": {
-    "url": "https://github.com/tobiasosDev/citecheck/issues"
+    "url": "https://github.com/makotophoenix19/citecheck/issues"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

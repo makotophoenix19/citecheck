@@ -4,6 +4,46 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0-hm.1] - 2026-07-10 — Houston Methodist fork
+
+Fork of [tobiasosDev/citecheck](https://github.com/tobiasosDev/citecheck) by the
+Houston Methodist Department of Pathology & Genomic Medicine, adding **PubMed** as
+a fourth verification source for biomedical literature.
+
+### Added
+
+- **PubMed (NCBI E-utilities) source** (`src/pubmed.ts`): ESearch/ESummary lookups,
+  globally rate-limited to NCBI's policy (3 req/s without a key, 10/s with
+  `CITECHECK_NCBI_API_KEY`). Added to both the structured (`.bib`/`.ris`/CSL-JSON)
+  and free-text/document paths.
+- **Direct PMID verification.** A PMID carried by a reference (BibTeX `pmid`, RIS
+  `AN`, CSL-JSON `PMID`, or an inline `PMID: …` in document text) is resolved
+  against PubMed as an exact-identity check. The CLI shows a positive
+  *"found in PubMed (PMID …)"* note when PubMed corroborates a reference.
+- **PubMed retraction detection** via the "Retracted Publication" publication type,
+  complementing Crossref's retraction metadata (the retraction *notice* type is
+  deliberately not flagged).
+- Tests: `test/pubmed.test.ts` (unit + end-to-end through `quickCheck` and
+  `checkFreeTextRef`), covering the DOI-exact fix, the fabrication guard, the PMID
+  rescue, and the bounded-escalation rate-limit guard.
+
+### Changed
+
+- **Verdict scoring tuned** (shared `scoreVerdict`): a reference whose exact DOI (or
+  PMID) resolves now verifies on a year match plus modest author *or* title
+  corroboration, fixing real papers with long subtitles (e.g. a WHO classification
+  "…: a summary") that previously landed in *partial* because the citation dropped
+  the subtitle. PubMed can only **upgrade** a Crossref verdict, never downgrade it.
+- BibTeX and RIS parsers now carry the PMID through to verification.
+
+### Notes
+
+- To bound outbound traffic, a PubMed *title search* is an escalation reserved for a
+  Crossref near-miss (a candidate that didn't verify); a reference Crossref can't
+  find at all does not trigger a blanket PubMed search. Cited PMIDs are always
+  verified directly.
+- Not republished to npm; install from this fork's source.
+
 ## [1.3.0] - 2026-06-09
 
 - **MCP server (`citecheck-mcp`):** verify references from an AI agent via three tools —

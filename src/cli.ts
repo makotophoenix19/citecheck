@@ -15,7 +15,7 @@ const magenta = (s: string) => c("35", s);
 const dim = (s: string) => c("2", s);
 const bold = (s: string) => c("1", s);
 
-const HELP = `citecheck v${VERSION} — sanity-check a bibliography against Crossref, OpenAlex and DOAJ.
+const HELP = `citecheck v${VERSION} — sanity-check a bibliography against Crossref, PubMed, OpenAlex and DOAJ.
 
 Flags references that don't exist or have been retracted, and notes which sources
 are published in DOAJ-listed open-access journals. No API key, no signup.
@@ -30,8 +30,9 @@ USAGE
 OPTIONS
   --json            Print the full result as JSON (for scripts / CI).
   --only-issues     Hide references that checked out clean.
-  --mailto <email>  Use the Crossref/OpenAlex "polite pool" (faster, kinder).
+  --mailto <email>  Use the Crossref/OpenAlex/PubMed "polite pool" (faster, kinder).
                     Also settable via the CITECHECK_MAILTO env var.
+                    (PubMed rate limits lift further with CITECHECK_NCBI_API_KEY.)
   --no-color        Disable ANSI colors (also respects NO_COLOR).
   -h, --help        Show this help.
   -v, --version     Show the version.
@@ -100,6 +101,14 @@ function truncate(s: string, n: number): string {
   return s.length > n ? s.slice(0, n - 1) + "…" : s;
 }
 
+// A confirming PubMed hit is a positive signal, shown only when it actually
+// corroborated the reference (verified / partial), like the DOAJ line.
+function pubmedNote(r: CitationCheckResult): string {
+  const pmid = r.pubmedMatch?.pmid;
+  if (!pmid || (r.status !== "verified" && r.status !== "partial_match")) return "";
+  return "\n" + dim(`       ↳ found in PubMed (PMID ${pmid})`);
+}
+
 function renderRow(r: CitationCheckResult, keyWidth: number): string {
   const v = VERDICT[r.status];
   const key = (r.key || "(no key)").padEnd(keyWidth);
@@ -109,7 +118,7 @@ function renderRow(r: CitationCheckResult, keyWidth: number): string {
   const notes = r.warnings.length ? "\n" + r.warnings.map((w) => dim("       ↳ " + w)).join("\n") : "";
   // DOAJ listing is a positive, open-access signal — only ever shown, never a warning.
   const doaj = r.journalStatus === "doaj_listed" ? "\n" + dim("       ↳ journal listed in DOAJ (open access)") : "";
-  return head + notes + doaj;
+  return head + notes + doaj + pubmedNote(r);
 }
 
 function renderDocRow(r: CitationCheckResult, index: number): string {
@@ -121,7 +130,7 @@ function renderDocRow(r: CitationCheckResult, index: number): string {
   const src = r.sourceRef ? "\n" + dim("       ↳ " + truncate(r.sourceRef, 80)) : "";
   const notes = r.warnings.length ? "\n" + r.warnings.map((w) => dim("       ↳ " + w)).join("\n") : "";
   const doaj = r.journalStatus === "doaj_listed" ? "\n" + dim("       ↳ journal listed in DOAJ (open access)") : "";
-  return head + src + notes + doaj;
+  return head + src + notes + doaj + pubmedNote(r);
 }
 
 function writeSummaryAndExitCode(citations: CitationCheckResult[], json: boolean): number {
@@ -165,7 +174,7 @@ async function runStructured(args: Args): Promise<number> {
     return 2;
   }
 
-  process.stderr.write(dim(`Checking ${items.length} reference${items.length === 1 ? "" : "s"} against Crossref, OpenAlex and DOAJ…\n`));
+  process.stderr.write(dim(`Checking ${items.length} reference${items.length === 1 ? "" : "s"} against Crossref, PubMed, OpenAlex and DOAJ…\n`));
   const result = await quickCheck(items);
 
   if (args.json) {
@@ -233,7 +242,7 @@ async function runDocument(args: Args): Promise<number> {
   if (extraction.truncated) {
     process.stdout.write(yellow(`Too many candidate references — only the first ${checked} of ${n} were checked. The bibliography may not have been isolated; add a "References" heading.\n`));
   }
-  process.stdout.write(dim("Only the reference text is sent to Crossref/OpenAlex/DOAJ — your document is never uploaded or stored.\n\n"));
+  process.stdout.write(dim("Only the reference text is sent to Crossref/PubMed/OpenAlex/DOAJ — your document is never uploaded or stored.\n\n"));
 
   const visible = result.citations
     .map((r, i) => ({ r, i: i + 1 }))

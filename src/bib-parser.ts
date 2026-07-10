@@ -54,6 +54,9 @@ function toCsl(entry: BibEntry): CslItemData {
     title: asString(fields.title),
     DOI: asString(fields.doi),
     URL: asString(fields.url),
+    // PubMed / Zotero .bib exports carry the PMID as a `pmid` field; keeping it
+    // lets citecheck verify the identifier directly against PubMed.
+    PMID: asString(fields.pmid),
     "container-title": asString(fields.booktitle) ?? asString(fields.journal) ?? asString(fields.journaltitle),
     publisher: asString(fields.publisher),
     type: entry.type,

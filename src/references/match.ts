@@ -1,7 +1,8 @@
 import * as crossref from "../crossref.js";
 import * as openalex from "../openalex.js";
+import * as pubmed from "../pubmed.js";
 import { checkByIssn } from "../doaj.js";
-import { normalizeTitle, type CheckVerdict, type CitationCheckResult } from "../quick-check.js";
+import { normalizeTitle, VERDICT_RANK, type CheckVerdict, type CitationCheckResult } from "../quick-check.js";
 
 /** Common low-signal words (EN + a few DE) dropped before measuring title containment. */
 const STOPWORDS = new Set(
@@ -170,7 +171,31 @@ export function verdictFor(c: Containment, candidateHasYear: boolean): CheckVerd
   return "not_found";
 }
 
-/** Check a single free-text reference string. Produces a CitationCheckResult. */
+/** A PMID cited inline, e.g. "PMID: 28170064" or "PubMed ID 28170064". */
+const PMID_RE = /\bpmid:?\s*(\d{4,9})\b|\bpubmed(?:\s*id)?:?\s*(\d{4,9})\b/i;
+
+export function extractPmidFromText(raw: string): string | undefined {
+  const m = raw.match(PMID_RE);
+  return m ? (m[1] ?? m[2]) : undefined;
+}
+
+/** Enrich a result in place with OpenAlex citation-count / open-access / DOAJ
+ * signal for a known DOI. Never throws. */
+async function enrichOpenAlex(result: CitationCheckResult, doi: string): Promise<void> {
+  const oa = await openalex.lookupByDoi(doi);
+  if (!oa) return;
+  result.openalexMatch = {
+    citedByCount: oa.cited_by_count,
+    isOa: oa.is_oa,
+    journalName: oa.primary_location?.source?.display_name,
+  };
+  if (oa.primary_location?.source?.is_in_doaj === true) {
+    result.journalStatus = "doaj_listed";
+  }
+}
+
+/** Check a single free-text reference string against Crossref, then PubMed as a
+ * biomedical rescue. Produces a CitationCheckResult. */
 export async function checkFreeTextRef(raw: string): Promise<CitationCheckResult> {
   const result: CitationCheckResult = {
     key: "",
@@ -178,91 +203,153 @@ export async function checkFreeTextRef(raw: string): Promise<CitationCheckResult
     status: "not_found",
     crossrefMatch: null,
     openalexMatch: null,
+    pubmedMatch: null,
     journalStatus: "unknown",
     retracted: false,
     warnings: [],
     sourceRef: raw,
   };
 
-  let candidates: crossref.CrossrefWork[];
+  const pmid = extractPmidFromText(raw);
+
+  // --- Crossref pass ---
+  let candidates: crossref.CrossrefWork[] = [];
+  let crossrefUnreachable = false;
   try {
     candidates = await crossref.searchByBibliographic(raw, 5);
   } catch {
-    result.status = "check_failed";
-    result.warnings.push("Could not reach Crossref — re-run to check this reference.");
-    return result;
+    crossrefUnreachable = true;
   }
 
-  if (candidates.length === 0) {
-    result.warnings.push("No matching record in Crossref — this reference may be fabricated.");
-    return result;
-  }
-
-  const candidate = candidates[0]!;
-  const cont = computeContainment(raw, candidate);
-  const candidateHasYear = crossref.extractYear(candidate) != null;
-  result.status = verdictFor(cont, candidateHasYear);
-  result.title = candidate.title?.[0] ?? "";
-  result.crossrefMatch = {
-    doi: candidate.DOI,
-    title: candidate.title?.[0],
-    titleSimilarity: cont.titleContainment,
-    authorOverlap: cont.surnameHit ? 1 : 0,
-    yearMatch: cont.yearHit,
-  };
-
-  // A rejected best-guess is not the user's reference — do not enrich it, and
-  // do not surface the rejected paper's title/match (the CLI would otherwise
-  // headline a fabricated ref with a real paper's title). Show only sourceRef.
-  if (result.status === "not_found") {
-    result.title = "";
-    result.crossrefMatch = null;
-    // Suppress the fabrication warning when the candidate title yielded zero
-    // extractable tokens (titleTokenCount === 0). That is a tokenizer limitation
-    // — e.g. a script the normalizer cannot segment — NOT evidence of
-    // fabrication, so asserting "may be fabricated" would falsely accuse a real
-    // non-English citation.
-    if (cont.titleTokenCount > 0) {
-      result.warnings.push("Closest Crossref record does not match this reference — it may be fabricated.");
-    } else {
-      result.warnings.push("Could not verify this reference automatically — please check it manually.");
-    }
-    return result;
-  }
-
-  if (result.status === "partial_match") {
-    // Reached when containment cleared 0.45 but the verified bar (high title
-    // overlap, or moderate overlap with surname+year) was not met — so the
-    // title genuinely only partially matches the closest record.
-    result.warnings.push("Reference text only partially matches the closest Crossref record.");
-    if (!cont.yearHit && candidateHasYear) {
-      result.warnings.push("Publication year not found in the reference text.");
-    }
-  }
-
-  if (crossref.isRetracted(candidate)) {
-    result.retracted = true;
-    result.warnings.push("This work has been retracted.");
-  }
-
-  const issns = candidate.ISSN ?? [];
-  if (issns.length > 0) {
-    result.journalStatus = await checkByIssn(issns[0]!);
-  }
-
-  if (candidate.DOI) {
-    const oa = await openalex.lookupByDoi(candidate.DOI);
-    if (oa) {
-      result.openalexMatch = {
-        citedByCount: oa.cited_by_count,
-        isOa: oa.is_oa,
-        journalName: oa.primary_location?.source?.display_name,
+  // Containment of the best Crossref candidate, kept for the not_found messaging
+  // (a zero-token candidate title signals a tokenizer limit, not fabrication).
+  let crCont: Containment | null = null;
+  if (candidates.length > 0) {
+    const candidate = candidates[0]!;
+    crCont = computeContainment(raw, candidate);
+    const candidateHasYear = crossref.extractYear(candidate) != null;
+    const crVerdict = verdictFor(crCont, candidateHasYear);
+    if (crVerdict !== "not_found") {
+      result.status = crVerdict;
+      result.title = candidate.title?.[0] ?? "";
+      result.crossrefMatch = {
+        doi: candidate.DOI,
+        title: candidate.title?.[0],
+        titleSimilarity: crCont.titleContainment,
+        authorOverlap: crCont.surnameHit ? 1 : 0,
+        yearMatch: crCont.yearHit,
       };
-      if (oa.primary_location?.source?.is_in_doaj === true) {
-        result.journalStatus = "doaj_listed";
+      if (crVerdict === "partial_match") {
+        result.warnings.push("Reference text only partially matches the closest Crossref record.");
+        if (!crCont.yearHit && candidateHasYear) {
+          result.warnings.push("Publication year not found in the reference text.");
+        }
+      }
+      if (crossref.isRetracted(candidate)) {
+        result.retracted = true;
+        result.warnings.push("This work has been retracted.");
+      }
+      const issns = candidate.ISSN ?? [];
+      if (issns.length > 0) result.journalStatus = await checkByIssn(issns[0]!);
+      if (candidate.DOI) await enrichOpenAlex(result, candidate.DOI);
+    }
+  }
+
+  // --- PubMed rescue --- upgrades only. A cited PMID is always verified
+  // directly (cheap). A PubMed title search is an escalation reserved for a
+  // Crossref NEAR-MISS: it fires only when Crossref returned a candidate that
+  // didn't verify — never on a reference Crossref couldn't find at all, so a
+  // large bibliography of junk/fabricated lines can't fan out into hundreds of
+  // rate-limited NCBI searches.
+  const escalateToPubmed = candidates.length > 0 && result.status !== "verified";
+  if (pmid || escalateToPubmed) {
+    let pmWork: pubmed.PubmedWork | null = null;
+    try {
+      if (pmid) pmWork = await pubmed.checkPmid(pmid);
+      else if (escalateToPubmed) pmWork = await bestPubmedByText(raw);
+    } catch {
+      pmWork = null; // PubMed unreachable — fall through with whatever we have.
+    }
+
+    if (pmWork) {
+      const pmLike = pubmed.toCrossrefLike(pmWork);
+      const pmCont = computeContainment(raw, pmLike);
+      const pmHasYear = pubmed.extractYear(pmWork) != null;
+      let pmVerdict = verdictFor(pmCont, pmHasYear);
+      // A PMID we looked up directly is an exact-identity match; accept a lower
+      // containment bar (subtitle drops, journal-in-line noise) as long as the
+      // title materially overlaps and the first author is present — but never on
+      // zero overlap, so a wrong/typo'd PMID can't auto-verify.
+      if (pmid && pmCont.titleContainment >= 0.5 && pmCont.surnameHit) pmVerdict = "verified";
+
+      if (
+        (pmVerdict === "verified" || pmVerdict === "partial_match") &&
+        VERDICT_RANK[pmVerdict] > VERDICT_RANK[result.status]
+      ) {
+        result.status = pmVerdict;
+        result.title = pmWork.title;
+        result.pubmedMatch = {
+          pmid: pmWork.pmid,
+          title: pmWork.title,
+          titleSimilarity: pmCont.titleContainment,
+          authorOverlap: pmCont.surnameHit ? 1 : 0,
+          yearMatch: pmCont.yearHit,
+        };
+        if (pmVerdict === "partial_match") {
+          result.warnings.push("Reference text only partially matches the closest PubMed record.");
+        }
+        if (pmWork.doi) await enrichOpenAlex(result, pmWork.doi);
+      }
+
+      if (pmVerdict === "verified" && pubmed.isRetracted(pmWork) && !result.retracted) {
+        result.retracted = true;
+        result.warnings.push("This work has been retracted (PubMed).");
       }
     }
   }
 
+  // --- Finalize a still-unresolved reference ---
+  if (result.status === "not_found") {
+    // Crossref was unreachable and nothing rescued it: a transient failure, not
+    // a verdict on the reference.
+    if (crossrefUnreachable && candidates.length === 0) {
+      result.status = "check_failed";
+      result.warnings.push("Could not reach Crossref — re-run to check this reference.");
+      return result;
+    }
+    // A rejected best-guess is not the user's reference — do not surface the
+    // rejected paper's title (the CLI would otherwise headline a fabricated ref
+    // with a real paper's title). Show only sourceRef.
+    result.title = "";
+    result.crossrefMatch = null;
+    if (candidates.length === 0) {
+      result.warnings.push("No matching record in Crossref or PubMed — this reference may be fabricated.");
+    } else if (crCont && crCont.titleTokenCount > 0) {
+      // Suppress the fabrication warning when the candidate title yielded zero
+      // extractable tokens — that is a tokenizer limitation (e.g. a script the
+      // normalizer cannot segment), NOT evidence of fabrication.
+      result.warnings.push("Closest record does not match this reference — it may be fabricated.");
+    } else {
+      result.warnings.push("Could not verify this reference automatically — please check it manually.");
+    }
+  }
+
   return result;
+}
+
+/** Search PubMed for a free-text reference and return the best containment
+ * match, or null. Rejects weak best-guesses the same way the Crossref path does. */
+async function bestPubmedByText(raw: string): Promise<pubmed.PubmedWork | null> {
+  const works = await pubmed.searchByText(raw, 5);
+  let best: pubmed.PubmedWork | null = null;
+  let bestScore = 0;
+  for (const w of works) {
+    const cont = computeContainment(raw, pubmed.toCrossrefLike(w));
+    if (cont.titleContainment > bestScore) {
+      bestScore = cont.titleContainment;
+      best = w;
+    }
+  }
+  // Below this, verdictFor would reject it as not_found anyway; skip the work.
+  return bestScore >= 0.45 ? best : null;
 }

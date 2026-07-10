@@ -3,7 +3,7 @@ import type { DocumentExtraction } from "../document.js";
 
 export const CAVEAT_NOT_FOUND =
   '"not found" means citecheck could not MATCH this reference — it is NOT proof the work is fabricated. ' +
-  "Preprints, books, grey literature and non-English sources are under-represented in Crossref/OpenAlex. " +
+  "Preprints, books, grey literature and non-English sources are under-represented in Crossref, PubMed and OpenAlex. " +
   "Treat it as a prompt to look, not a verdict.";
 
 export const CAVEAT_CHECK_FAILED =
@@ -12,16 +12,16 @@ export const CAVEAT_CHECK_FAILED =
 
 export const CAVEAT_DOCUMENT =
   "Confirm the detected reference count matches your bibliography — segmentation of messy formatting is " +
-  "best-effort. Only each reference string was sent to Crossref/OpenAlex/DOAJ; the document body was never uploaded. " +
+  "best-effort. Only each reference string was sent to Crossref/PubMed/OpenAlex/DOAJ; the document body was never uploaded. " +
   CAVEAT_NOT_FOUND;
 
 export function interpret(status: CheckVerdict, retracted: boolean): string {
   if (retracted) return "This work has been RETRACTED.";
   switch (status) {
-    case "verified": return "A matching record exists in Crossref/OpenAlex.";
+    case "verified": return "A matching record exists in Crossref, PubMed or OpenAlex.";
     case "partial_match": return "A record exists but the metadata only partly matches — often just a sloppy entry.";
     case "suspicious": return "A record was found but it matches poorly — possibly the wrong source.";
-    case "not_found": return "No matching record in Crossref or OpenAlex.";
+    case "not_found": return "No matching record in Crossref, PubMed or OpenAlex.";
     case "check_failed": return "Could not reach Crossref (network/rate-limit).";
   }
 }
@@ -35,6 +35,7 @@ export interface VerifyShape {
   retracted: boolean;
   matchedTitle: string | null;
   doi: string | null;
+  pmid: string | null;
   openAccess: boolean;
   interpretation: string;
   caveat?: string;
@@ -46,6 +47,7 @@ export function shapeVerify(r: CitationCheckResult): VerifyShape {
     retracted: r.retracted,
     matchedTitle: r.title || null,
     doi: r.crossrefMatch?.doi ?? null,
+    pmid: r.pubmedMatch?.pmid ?? null,
     openAccess: isOpenAccess(r),
     interpretation: interpret(r.status, r.retracted),
   };
