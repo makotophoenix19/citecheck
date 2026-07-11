@@ -2,7 +2,7 @@ import { extractDocumentText, formatOf } from "./ingest/index.js";
 import { locateBibliography } from "./references/locate-section.js";
 import { segmentReferences } from "./references/segment.js";
 import { checkFreeTextRef } from "./references/match.js";
-import type { QuickCheckResult, CitationCheckResult } from "./quick-check.js";
+import type { QuickCheckResult, CitationCheckResult, CheckOptions } from "./quick-check.js";
 
 export interface DocumentExtraction {
   format: "docx" | "txt" | "md";
@@ -65,6 +65,7 @@ const MAX_TEXT_CHARS = 5_000_000;
  */
 export async function checkDocument(
   input: { bytes: Uint8Array; filename: string },
+  opts?: CheckOptions,
 ): Promise<CheckDocumentResult> {
   const format = formatOf(input.filename);
   if (format === null) {
@@ -106,6 +107,7 @@ export async function checkDocument(
   for (let i = 0; i < refs.length; i += batchSize) {
     const batch = refs.slice(i, i + batchSize);
     citations.push(...(await Promise.all(batch.map(checkFreeTextRef))));
+    opts?.onProgress?.(citations.length, refs.length);
   }
 
   return {

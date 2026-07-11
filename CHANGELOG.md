@@ -4,6 +4,33 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-07-11 — Houston Methodist edition
+
+Usability release aimed at a non-technical demo: run `citecheck` with no
+arguments and it walks you through the whole thing.
+
+### Added
+
+- **Guided wizard** (`citecheck` with no file, or `--wizard`/`-w`): lists the
+  bibliography files in the current folder, Downloads, and Desktop; lets you pick
+  one (or paste a path); asks how you want the results (Excel spreadsheet or an
+  on-screen list of problems) and whether to use normal or strict year matching;
+  then runs and, for the spreadsheet option, writes the CSV next to your file and
+  opens it. Interactive-only; scripts should keep using the flags.
+- **Native Pure "Research Output" CSV input.** `citecheck export.csv` now works
+  directly — no separate conversion step. A `.csv` is parsed as a Pure export
+  (DOI, title, year, authors, journal), deduped by DOI. Includes a small
+  RFC-4180 CSV reader (`src/pure-csv.ts`).
+- **Live progress indicator** on long runs: a spinner and `checked N / total`
+  counter on stderr, so a big catalog never looks frozen. TTY-gated, so it never
+  appears in `--json` / `--csv` output or automated pipelines.
+
+### Changed
+
+- The CLI now sets the exit code instead of force-exiting, so a large `--csv`
+  piped into another program flushes completely before the process ends.
+- `quickCheck` / `checkDocument` accept an optional `onProgress` callback.
+
 ## [1.0.1] - 2026-07-11 — Houston Methodist edition
 
 > The Houston Methodist edition versions independently starting at **1.0** (the

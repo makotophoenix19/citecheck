@@ -5,3 +5,4 @@ dist/
 *.tgz
 .superpowers/
 results/
+*.citecheck.csv

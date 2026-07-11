@@ -67,13 +67,24 @@ Requires Node.js 18 or newer.
 
 ## Usage
 
+Run it with **no arguments** for a guided wizard — it lists the bibliography
+files in your current folder and Downloads, lets you pick one, and asks how you'd
+like the results (an Excel spreadsheet, or an on-screen list of problems):
+
+```sh
+citecheck
+```
+
+Or check a file directly:
+
 ```sh
 citecheck <file> [options]
 ```
 
 `<file>` is a `.bib` / `.bibtex`, `.ris`, or CSL-JSON (`.json`) bibliography —
 the kind you get from **Zotero → Export**, Mendeley, EndNote, or any reference
-manager. Pass `-` to read from stdin (the format is auto-detected):
+manager — or a Pure **"Research Output" `.csv`** export. Pass `-` to read from
+stdin (the format is auto-detected):
 
 ```sh
 # Zotero: right-click a collection → Export Collection → Better CSL JSON
@@ -87,6 +98,7 @@ cat refs.bib | citecheck -
 
 | Option | What it does |
 | --- | --- |
+| `-w, --wizard` | Guided, interactive mode: pick a file, choose options, and run. Also the default when you run `citecheck` with no file. |
 | `--json` | Print the full result as JSON (for scripts / CI). |
 | `--csv` | Print a spreadsheet-friendly CSV report (opens directly in Excel). |
 | `--only-issues` | Hide references that checked out clean. |

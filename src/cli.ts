@@ -6,6 +6,9 @@ import { VERSION } from "./http.js";
 import { checkDocument, MAX_INPUT_BYTES, tooLargeMessage, type CheckDocumentResult } from "./document.js";
 import { formatOf } from "./ingest/index.js";
 import { printBanner } from "./banner.js";
+import { toCsv } from "./report.js";
+import { makeProgress } from "./progress.js";
+import { runWizard } from "./wizard.js";
 
 const USE_COLOR = Boolean(process.stdout.isTTY) && !process.env.NO_COLOR;
 const c = (code: string, s: string) => (USE_COLOR ? `\x1b[${code}m${s}\x1b[0m` : s);
@@ -22,13 +25,15 @@ Flags references that don't exist or have been retracted, and notes which source
 are published in DOAJ-listed open-access journals. No API key, no signup.
 
 USAGE
-  citecheck <file> [options]
+  citecheck                  Launch the guided wizard (pick a file, choose options).
+  citecheck <file> [options] Check a file directly.
 
-  <file>   A .bib / .bibtex, .ris, or CSL-JSON (.json) bibliography export,
-           OR a document to extract references from: .docx, .txt, .md.
+  <file>   A .bib / .bibtex, .ris, CSL-JSON (.json), or Pure "Research Output"
+           .csv export, OR a document to extract references from: .docx, .txt, .md.
            Pass "-" to read a bibliography export from stdin (auto-detects format).
 
 OPTIONS
+  -w, --wizard      Guided, interactive mode (also the default with no file).
   --json            Print the full result as JSON (for scripts / CI).
   --csv             Print a spreadsheet-friendly CSV report (opens in Excel).
   --only-issues     Hide references that checked out clean.
@@ -62,13 +67,14 @@ interface Args {
   csv: boolean;
   onlyIssues: boolean;
   strict: boolean;
+  wizard: boolean;
   mailto?: string;
   help: boolean;
   version: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
-  const args: Args = { json: false, csv: false, onlyIssues: false, strict: false, help: false, version: false };
+  const args: Args = { json: false, csv: false, onlyIssues: false, strict: false, wizard: false, help: false, version: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     switch (a) {
@@ -76,6 +82,7 @@ function parseArgs(argv: string[]): Args {
       case "--csv": args.csv = true; break;
       case "--only-issues": args.onlyIssues = true; break;
       case "--strict": args.strict = true; break;
+      case "--wizard": case "-w": args.wizard = true; break;
       case "--no-color": process.env.NO_COLOR = "1"; break;
       case "--mailto": args.mailto = argv[++i]; break;
       case "-h": case "--help": args.help = true; break;
@@ -89,27 +96,6 @@ function parseArgs(argv: string[]): Args {
   return args;
 }
 
-/** One CSV row per reference, spreadsheet-friendly (opens directly in Excel). */
-function toCsv(citations: CitationCheckResult[]): string {
-  const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const head = ["key", "status", "retracted", "open_access", "doi", "pmid", "title", "notes", "source_ref"];
-  const lines = [head.join(",")];
-  for (const r of citations) {
-    const openAccess = r.journalStatus === "doaj_listed" || r.openalexMatch?.isOa === true;
-    lines.push([
-      r.key || "",
-      r.status,
-      r.retracted ? "yes" : "",
-      openAccess ? "yes" : "",
-      r.crossrefMatch?.doi ?? "",
-      r.pubmedMatch?.pmid ?? "",
-      r.title || "",
-      r.warnings.join(" | "),
-      r.sourceRef ?? "",
-    ].map(esc).join(","));
-  }
-  return lines.join("\n") + "\n";
-}
 
 async function readInput(file: string): Promise<string> {
   if (file === "-") {
@@ -207,7 +193,9 @@ async function runStructured(args: Args): Promise<number> {
   }
 
   process.stderr.write(dim(`Checking ${items.length} reference${items.length === 1 ? "" : "s"} against Crossref, PubMed, OpenAlex and DOAJ…\n`));
-  const result = await quickCheck(items);
+  const prog = makeProgress();
+  const result = await quickCheck(items, { onProgress: prog.onProgress });
+  prog.done();
 
   if (args.json) {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
@@ -249,7 +237,9 @@ async function runDocument(args: Args): Promise<number> {
   let doc: CheckDocumentResult;
   try {
     process.stderr.write(dim(`Extracting references from ${args.file}…\n`));
-    doc = await checkDocument({ bytes, filename: args.file! });
+    const prog = makeProgress();
+    doc = await checkDocument({ bytes, filename: args.file! }, { onProgress: prog.onProgress });
+    prog.done();
   } catch (err) {
     process.stderr.write(red(`${(err as Error).message}\n`));
     return 2;
@@ -299,12 +289,16 @@ async function runDocument(args: Args): Promise<number> {
 async function main(): Promise<number> {
   const args = parseArgs(process.argv.slice(2));
   if (args.version) { process.stdout.write(VERSION + "\n"); return 0; }
-  // Bare launch or --help: greet with the banner, then show usage. This is the
-  // "just open it" screen.
   if (args.help) { printBanner(); process.stdout.write(HELP); return 0; }
-  if (!args.file) { printBanner(); process.stdout.write(HELP); return 0; }
   if (args.mailto) process.env.CITECHECK_MAILTO = args.mailto;
   if (args.strict) process.env.CITECHECK_STRICT = "1";
+
+  // Guided mode: explicit --wizard, or a bare interactive launch with no file.
+  if (args.wizard || (!args.file && process.stdin.isTTY && process.stdout.isTTY)) {
+    return runWizard();
+  }
+  // No file and not interactive (piped/scripted): greet and show usage.
+  if (!args.file) { printBanner(); process.stdout.write(HELP); return 0; }
 
   printBanner();
 
@@ -314,10 +308,12 @@ async function main(): Promise<number> {
   return runStructured(args);
 }
 
+// Set the exit code rather than force-exiting, so buffered stdout (e.g. a large
+// --csv piped into another program) fully flushes before the process ends.
 main().then(
-  (code) => process.exit(code),
+  (code) => { process.exitCode = code; },
   (err) => {
     process.stderr.write(`citecheck: ${(err as Error).stack ?? err}\n`);
-    process.exit(2);
+    process.exitCode = 2;
   },
 );

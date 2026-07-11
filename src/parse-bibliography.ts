@@ -2,6 +2,7 @@ import { extname } from "node:path";
 import { parseBib } from "./bib-parser.js";
 import { parseRis } from "./ris-parser.js";
 import { parseCslJson } from "./csl-json.js";
+import { parsePureCsv, looksLikePureCsv } from "./pure-csv.js";
 import type { CslItemData } from "./types.js";
 
 /**
@@ -15,11 +16,13 @@ export function detectAndParse(file: string, text: string): CslItemData[] {
   if (ext === ".bib" || ext === ".bibtex") return parseBib(text);
   if (ext === ".ris") return parseRis(text);
   if (ext === ".json") return parseCslJson(text);
+  if (ext === ".csv") return parsePureCsv(text);
 
   // No usable extension: sniff the content.
   const t = text.trimStart();
   if (t.startsWith("[") || t.startsWith("{")) return parseCslJson(text);
   if (/^TY {2}- /m.test(t)) return parseRis(text);
   if (t.startsWith("@")) return parseBib(text);
+  if (looksLikePureCsv(text)) return parsePureCsv(text);
   return [];
 }

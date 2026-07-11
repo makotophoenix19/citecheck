@@ -376,8 +376,14 @@ async function checkSingle(item: CslItemData): Promise<CitationCheckResult> {
   return result;
 }
 
+export interface CheckOptions {
+  /** Called after each batch with the number checked so far and the total, so a
+   * caller can render live progress on a long run. */
+  onProgress?: (done: number, total: number) => void;
+}
+
 /** Check every reference against Crossref, PubMed, OpenAlex and DOAJ. No API key needed. */
-export async function quickCheck(items: CslItemData[]): Promise<QuickCheckResult> {
+export async function quickCheck(items: CslItemData[], opts?: CheckOptions): Promise<QuickCheckResult> {
   const batchSize = 10;
   const results: CitationCheckResult[] = [];
 
@@ -385,6 +391,7 @@ export async function quickCheck(items: CslItemData[]): Promise<QuickCheckResult
     const batch = items.slice(i, i + batchSize);
     const batchResults = await Promise.all(batch.map(checkSingle));
     results.push(...batchResults);
+    opts?.onProgress?.(results.length, items.length);
   }
 
   return { citations: results, checkedAt: new Date().toISOString() };
