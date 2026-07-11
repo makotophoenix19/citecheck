@@ -88,7 +88,9 @@ cat refs.bib | citecheck -
 | Option | What it does |
 | --- | --- |
 | `--json` | Print the full result as JSON (for scripts / CI). |
+| `--csv` | Print a spreadsheet-friendly CSV report (opens directly in Excel). |
 | `--only-issues` | Hide references that checked out clean. |
+| `--strict` | Require an **exact** publication year. **Not recommended:** by default a 1-year gap is tolerated because online-ahead-of-print and issue dates routinely differ, and strict mode re-flags many perfectly real references. |
 | `--mailto <email>` | Use the Crossref/OpenAlex/PubMed "polite pool" — faster, kinder rate limits. Also settable via the `CITECHECK_MAILTO` env var. |
 | `--no-color` | Disable ANSI colors (also respects `NO_COLOR`). |
 

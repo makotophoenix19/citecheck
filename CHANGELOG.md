@@ -4,11 +4,43 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.4.0-hm.1] - 2026-07-10 — Houston Methodist fork
+## [1.0.1] - 2026-07-11 — Houston Methodist edition
+
+> The Houston Methodist edition versions independently starting at **1.0** (the
+> PubMed-complete fork below), derived from upstream
+> [tobiasosDev/citecheck](https://github.com/tobiasosDev/citecheck) 1.3.0.
+
+Tuning and usability changes informed by validating the tool against 4,734 real
+Houston Methodist Pathology publications (99.9% of DOI-bearing references found,
+zero false "not found" on mainstream literature).
+
+### Added
+
+- **`--strict`**: require an exact publication year. Off by default (see below);
+  documented as not-recommended because it re-flags many real references.
+- **`--csv`**: spreadsheet-friendly per-reference report that opens directly in
+  Excel (key, status, retracted, open-access, DOI, PMID, title, notes, source).
+- **Retro boot banner** (`src/banner.ts`): an ANSI block wordmark printed on an
+  interactive run. Written to stderr and gated on a TTY, so it never contaminates
+  `--json` / `--csv` output or automated pipelines.
+
+### Changed
+
+- **±1-year tolerance for DOI/PMID-verified references.** A reference whose
+  identifier resolves and whose title and authors match now verifies even when
+  its year is off by one, absorbing the routine online-ahead-of-print vs
+  issue-date gap. In the full-catalog validation this moved ~200 real papers out
+  of the "review" bucket without weakening fabrication detection (a fake still
+  fails the title AND author checks). Verified references that used the tolerance
+  carry a plain-language note explaining why the year gap is not a concern.
+  `--strict` restores exact-year matching.
+
+## [1.4.0-hm.1] - 2026-07-10 — PubMed source (fork of tobiasosDev/citecheck)
 
 Fork of [tobiasosDev/citecheck](https://github.com/tobiasosDev/citecheck) by the
 Houston Methodist Department of Pathology & Genomic Medicine, adding **PubMed** as
-a fourth verification source for biomedical literature.
+a fourth verification source for biomedical literature. Re-designated **v1.0** of
+the Houston Methodist edition.
 
 ### Added
 

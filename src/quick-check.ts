@@ -2,7 +2,14 @@ import type { CslItemData } from "./types.js";
 import * as crossref from "./crossref.js";
 import * as openalex from "./openalex.js";
 import * as pubmed from "./pubmed.js";
+import { strictMode } from "./http.js";
 import { checkByIssn, type DoajStatus } from "./doaj.js";
+
+/** Positive, informational note shown on a reference that verified despite its
+ * year being off by one — so a reviewer sees WHY it passed and that it is not a
+ * concern. */
+export const YEAR_TOLERANCE_NOTE =
+  "Publication year is off by 1 from the matched record — normal for online-ahead-of-print vs issue date, not a concern. Verified on DOI, title, and authors.";
 
 export type CheckVerdict =
   | "verified"
@@ -127,22 +134,28 @@ export const VERDICT_RANK: Record<CheckVerdict, number> = {
  * real papers with long subtitles (e.g. a WHO classification "…: a summary")
  * landing in partial_match: their DOI resolves exactly, but symmetric title
  * Jaccard dips below 0.7 because the citation drops the subtitle.
+ *
+ * `yearOk` is the tolerance-aware year signal computed by the caller: an exact
+ * year, a missing year, or (by default) a year within 1 of the record. Only
+ * `--strict` narrows it to an exact match. The 1-year slack absorbs the routine
+ * online-ahead-of-print vs issue-date gap without weakening fabrication
+ * detection, because a fake still fails the title AND author checks alongside it.
  */
 function scoreVerdict(
   titleSim: number,
   authOverlap: number,
-  yearMatch: boolean,
+  yearOk: boolean,
   exactId: boolean,
 ): CheckVerdict {
-  // Exact-identifier path: the record IS this work. Require a year match plus
-  // either author OR title corroboration so a hallucinated DOI that happens to
-  // resolve to some real (but unrelated) paper still fails to verify.
-  if (exactId && yearMatch && (authOverlap >= 0.5 || titleSim >= 0.5)) return "verified";
-  if (titleSim >= 0.7 && authOverlap >= 0.5 && yearMatch) return "verified";
+  // Exact-identifier path: the record IS this work. Require an acceptable year
+  // plus either author OR title corroboration so a hallucinated DOI that happens
+  // to resolve to some real (but unrelated) paper still fails to verify.
+  if (exactId && yearOk && (authOverlap >= 0.5 || titleSim >= 0.5)) return "verified";
+  if (titleSim >= 0.7 && authOverlap >= 0.5 && yearOk) return "verified";
   // Subtitle-drop tolerance: a citation that omits a candidate's post-colon
   // subtitle drags symmetric title Jaccard down; accept the lower bar only when
   // BOTH surname overlap AND the year independently corroborate.
-  if (titleSim >= 0.5 && authOverlap >= 0.5 && yearMatch) return "verified";
+  if (titleSim >= 0.5 && authOverlap >= 0.5 && yearOk) return "verified";
   if (titleSim >= 0.4 || authOverlap >= 0.3) return "partial_match";
   return "suspicious";
 }
@@ -183,6 +196,7 @@ async function checkSingle(item: CslItemData): Promise<CitationCheckResult> {
     warnings: [],
   };
 
+  const strict = strictMode();
   const srcTitle = normalizeTitle(item.title);
   const srcYear = getCitationYear(item);
   let crWork: crossref.CrossrefWork | null = null;
@@ -222,7 +236,11 @@ async function checkSingle(item: CslItemData): Promise<CitationCheckResult> {
     const titleSim = jaccardSimilarity(srcTitle, crTitle);
     const authOverlap = authorOverlapScore(item.author, crWork.author);
     const crYear = crossref.extractYear(crWork);
-    const yearMatch = srcYear != null && crYear != null ? srcYear === crYear : true;
+    const yearDelta = srcYear != null && crYear != null ? Math.abs(srcYear - crYear) : null;
+    const yearMatch = yearDelta == null ? true : yearDelta === 0;
+    // Default: tolerate a 1-year gap (online-ahead-of-print vs issue date).
+    // --strict requires an exact year.
+    const yearOk = strict ? yearMatch : yearDelta == null ? true : yearDelta <= 1;
 
     result.crossrefMatch = {
       doi: crWork.DOI,
@@ -237,8 +255,10 @@ async function checkSingle(item: CslItemData): Promise<CitationCheckResult> {
       result.warnings.push("This work has been retracted.");
     }
 
-    result.status = scoreVerdict(titleSim, authOverlap, yearMatch, matchedByDoi);
-    if (result.status === "partial_match") {
+    result.status = scoreVerdict(titleSim, authOverlap, yearOk, matchedByDoi);
+    if (result.status === "verified" && yearDelta === 1) {
+      result.warnings.push(YEAR_TOLERANCE_NOTE);
+    } else if (result.status === "partial_match") {
       if (titleSim < 0.7) result.warnings.push("Title differs from Crossref record.");
       if (!yearMatch) result.warnings.push("Publication year mismatch.");
     } else if (result.status === "suspicious") {
@@ -289,8 +309,10 @@ async function checkSingle(item: CslItemData): Promise<CitationCheckResult> {
       const pmTitleSim = jaccardSimilarity(srcTitle, normalizeTitle(pmWork.title));
       const pmAuthOverlap = authorOverlapScore(item.author, pubmed.toCrossrefLike(pmWork).author);
       const pmYear = pubmed.extractYear(pmWork);
-      const pmYearMatch = srcYear != null && pmYear != null ? srcYear === pmYear : true;
-      const pmVerdict = scoreVerdict(pmTitleSim, pmAuthOverlap, pmYearMatch, srcPmid != null);
+      const pmYearDelta = srcYear != null && pmYear != null ? Math.abs(srcYear - pmYear) : null;
+      const pmYearMatch = pmYearDelta == null ? true : pmYearDelta === 0;
+      const pmYearOk = strict ? pmYearMatch : pmYearDelta == null ? true : pmYearDelta <= 1;
+      const pmVerdict = scoreVerdict(pmTitleSim, pmAuthOverlap, pmYearOk, srcPmid != null);
 
       result.pubmedMatch = {
         pmid: pmWork.pmid,
@@ -309,6 +331,9 @@ async function checkSingle(item: CslItemData): Promise<CitationCheckResult> {
       ) {
         if (pmVerdict === "verified") {
           result.warnings = result.warnings.filter((w) => !CROSSREF_SOFT_WARNINGS.has(w));
+          if (pmYearDelta === 1 && !result.warnings.includes(YEAR_TOLERANCE_NOTE)) {
+            result.warnings.push(YEAR_TOLERANCE_NOTE);
+          }
         }
         result.status = pmVerdict;
         if (!result.title) result.title = pmWork.title;

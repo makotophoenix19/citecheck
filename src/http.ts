@@ -41,6 +41,19 @@ export function ncbiApiKey(): string | undefined {
   return k || undefined;
 }
 
+/**
+ * Strict-year mode (`CITECHECK_STRICT` / CLI `--strict`). Off by default: a
+ * reference whose DOI resolves and whose title and authors match is verified
+ * even when its year is off by one, because online-ahead-of-print and issue
+ * dates routinely differ by a year. Strict mode requires an exact year — more
+ * control, but it re-flags many perfectly real references, so it is not the
+ * recommended default.
+ */
+export function strictMode(): boolean {
+  const v = process.env.CITECHECK_STRICT?.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
+
 export function userAgent(): string {
   const mailto = politeMailto();
   return `citecheck/${VERSION} (+${REPO}${mailto ? `; mailto:${mailto}` : ""})`;

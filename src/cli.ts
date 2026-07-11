@@ -5,6 +5,7 @@ import { detectAndParse } from "./parse-bibliography.js";
 import { VERSION } from "./http.js";
 import { checkDocument, MAX_INPUT_BYTES, tooLargeMessage, type CheckDocumentResult } from "./document.js";
 import { formatOf } from "./ingest/index.js";
+import { printBanner } from "./banner.js";
 
 const USE_COLOR = Boolean(process.stdout.isTTY) && !process.env.NO_COLOR;
 const c = (code: string, s: string) => (USE_COLOR ? `\x1b[${code}m${s}\x1b[0m` : s);
@@ -29,7 +30,12 @@ USAGE
 
 OPTIONS
   --json            Print the full result as JSON (for scripts / CI).
+  --csv             Print a spreadsheet-friendly CSV report (opens in Excel).
   --only-issues     Hide references that checked out clean.
+  --strict          Require an EXACT publication year. NOT recommended: by
+                    default a 1-year gap is tolerated because online-ahead-of-
+                    print and issue dates routinely differ, and strict mode
+                    re-flags many perfectly real references as a result.
   --mailto <email>  Use the Crossref/OpenAlex/PubMed "polite pool" (faster, kinder).
                     Also settable via the CITECHECK_MAILTO env var.
                     (PubMed rate limits lift further with CITECHECK_NCBI_API_KEY.)
@@ -53,19 +59,23 @@ EXAMPLES
 interface Args {
   file?: string;
   json: boolean;
+  csv: boolean;
   onlyIssues: boolean;
+  strict: boolean;
   mailto?: string;
   help: boolean;
   version: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
-  const args: Args = { json: false, onlyIssues: false, help: false, version: false };
+  const args: Args = { json: false, csv: false, onlyIssues: false, strict: false, help: false, version: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     switch (a) {
       case "--json": args.json = true; break;
+      case "--csv": args.csv = true; break;
       case "--only-issues": args.onlyIssues = true; break;
+      case "--strict": args.strict = true; break;
       case "--no-color": process.env.NO_COLOR = "1"; break;
       case "--mailto": args.mailto = argv[++i]; break;
       case "-h": case "--help": args.help = true; break;
@@ -77,6 +87,28 @@ function parseArgs(argv: string[]): Args {
     }
   }
   return args;
+}
+
+/** One CSV row per reference, spreadsheet-friendly (opens directly in Excel). */
+function toCsv(citations: CitationCheckResult[]): string {
+  const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const head = ["key", "status", "retracted", "open_access", "doi", "pmid", "title", "notes", "source_ref"];
+  const lines = [head.join(",")];
+  for (const r of citations) {
+    const openAccess = r.journalStatus === "doaj_listed" || r.openalexMatch?.isOa === true;
+    lines.push([
+      r.key || "",
+      r.status,
+      r.retracted ? "yes" : "",
+      openAccess ? "yes" : "",
+      r.crossrefMatch?.doi ?? "",
+      r.pubmedMatch?.pmid ?? "",
+      r.title || "",
+      r.warnings.join(" | "),
+      r.sourceRef ?? "",
+    ].map(esc).join(","));
+  }
+  return lines.join("\n") + "\n";
 }
 
 async function readInput(file: string): Promise<string> {
@@ -179,6 +211,8 @@ async function runStructured(args: Args): Promise<number> {
 
   if (args.json) {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else if (args.csv) {
+    process.stdout.write(toCsv(result.citations));
   } else {
     const rows = args.onlyIssues
       ? result.citations.filter((r) => r.status !== "verified" || r.retracted)
@@ -232,6 +266,11 @@ async function runDocument(args: Args): Promise<number> {
     return writeSummaryAndExitCode(result.citations, true);
   }
 
+  if (args.csv) {
+    process.stdout.write(toCsv(result.citations));
+    return writeSummaryAndExitCode(result.citations, true);
+  }
+
   const n = extraction.referencesDetected;
   const checked = extraction.referencesChecked;
   if (extraction.sectionFound) {
@@ -263,6 +302,9 @@ async function main(): Promise<number> {
   if (args.version) { process.stdout.write(VERSION + "\n"); return 0; }
   if (!args.file) { process.stderr.write(HELP); return 2; }
   if (args.mailto) process.env.CITECHECK_MAILTO = args.mailto;
+  if (args.strict) process.env.CITECHECK_STRICT = "1";
+
+  printBanner();
 
   if (args.file !== "-" && formatOf(args.file) !== null) {
     return runDocument(args);
