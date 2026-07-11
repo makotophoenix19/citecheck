@@ -61,8 +61,10 @@ function humanSize(bytes: number): string {
 
 function humanDate(ms: number): string {
   const d = new Date(ms);
-  const base = d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
-  return d.getFullYear() === new Date().getFullYear() ? base : `${base} ${d.getFullYear()}`;
+  // Always show the year — an old export may be exactly the one you want.
+  const md = d.toLocaleString("en-US", { month: "short", day: "2-digit" });
+  const time = d.toLocaleString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+  return `${md}, ${d.getFullYear()} ${time}`;
 }
 
 async function ask(rl: readline.Interface, prompt: string, fallback = ""): Promise<string> {
@@ -90,7 +92,7 @@ export async function runWizard(): Promise<number> {
       const nameWidth = Math.min(52, Math.max(...cands.map((f) => basename(f.path).length)));
       cands.forEach((f, i) => {
         const name = basename(f.path).padEnd(nameWidth);
-        const meta = `${humanSize(f.size).padStart(7)}  ${humanDate(f.mtime).padStart(12)}  ${f.where}`;
+        const meta = `${humanSize(f.size).padStart(7)}  ${humanDate(f.mtime).padStart(18)}  ${f.where}`;
         process.stdout.write(`   ${teal(String(i + 1).padStart(2))}  ${name}   ${dim(meta)}\n`);
       });
       process.stdout.write("\n");
