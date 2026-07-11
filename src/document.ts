@@ -106,7 +106,11 @@ export async function checkDocument(
   const batchSize = 10;
   for (let i = 0; i < refs.length; i += batchSize) {
     const batch = refs.slice(i, i + batchSize);
-    citations.push(...(await Promise.all(batch.map(checkFreeTextRef))));
+    const batchResults = await Promise.all(batch.map(checkFreeTextRef));
+    for (const r of batchResults) {
+      citations.push(r);
+      opts?.onResult?.(r, citations.length, refs.length);
+    }
     opts?.onProgress?.(citations.length, refs.length);
   }
 

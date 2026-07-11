@@ -7,7 +7,7 @@ import { checkDocument, MAX_INPUT_BYTES, tooLargeMessage, type CheckDocumentResu
 import { formatOf } from "./ingest/index.js";
 import { printBanner } from "./banner.js";
 import { toCsv } from "./report.js";
-import { makeProgress } from "./progress.js";
+import { makeProgress, verboseLine } from "./progress.js";
 import { runWizard } from "./wizard.js";
 import { loadConfig, saveMailto } from "./config.js";
 
@@ -35,6 +35,8 @@ USAGE
 
 OPTIONS
   -w, --wizard      Guided, interactive mode (also the default with no file).
+  -V, --verbose     Stream every reference and its verdict live as it's checked,
+                    instead of a quiet progress counter.
   --json            Print the full result as JSON (for scripts / CI).
   --csv             Print a spreadsheet-friendly CSV report (opens in Excel).
   --only-issues     Hide references that checked out clean.
@@ -69,13 +71,14 @@ interface Args {
   onlyIssues: boolean;
   strict: boolean;
   wizard: boolean;
+  verbose: boolean;
   mailto?: string;
   help: boolean;
   version: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
-  const args: Args = { json: false, csv: false, onlyIssues: false, strict: false, wizard: false, help: false, version: false };
+  const args: Args = { json: false, csv: false, onlyIssues: false, strict: false, wizard: false, verbose: false, help: false, version: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     switch (a) {
@@ -84,6 +87,7 @@ function parseArgs(argv: string[]): Args {
       case "--only-issues": args.onlyIssues = true; break;
       case "--strict": args.strict = true; break;
       case "--wizard": case "-w": args.wizard = true; break;
+      case "--verbose": case "-V": args.verbose = true; break;
       case "--no-color": process.env.NO_COLOR = "1"; break;
       case "--mailto": args.mailto = argv[++i]; break;
       case "-h": case "--help": args.help = true; break;
@@ -178,6 +182,23 @@ function writeSummaryAndExitCode(citations: CitationCheckResult[], json: boolean
   return counts.not_found > 0 || counts.suspicious > 0 || counts.retracted > 0 ? 1 : 0;
 }
 
+/** Progress rendering for a run: a live per-reference stream (--verbose) or a
+ * quiet spinner. Both write to stderr, so stdout (--json/--csv) stays clean. */
+function progressFor(verbose: boolean): {
+  opts: { onProgress?: (d: number, t: number) => void; onResult?: (r: CitationCheckResult, d: number, t: number) => void };
+  done: () => void;
+} {
+  if (verbose) {
+    const color = Boolean(process.stderr.isTTY) && !process.env.NO_COLOR;
+    return {
+      opts: { onResult: (r, d, t) => process.stderr.write(verboseLine(r, d, t, color) + "\n") },
+      done: () => {},
+    };
+  }
+  const prog = makeProgress();
+  return { opts: { onProgress: prog.onProgress }, done: prog.done };
+}
+
 async function runStructured(args: Args): Promise<number> {
   let text: string;
   try {
@@ -194,9 +215,9 @@ async function runStructured(args: Args): Promise<number> {
   }
 
   process.stderr.write(dim(`Checking ${items.length} reference${items.length === 1 ? "" : "s"} against Crossref, PubMed, OpenAlex and DOAJ…\n`));
-  const prog = makeProgress();
-  const result = await quickCheck(items, { onProgress: prog.onProgress });
-  prog.done();
+  const { opts, done } = progressFor(args.verbose);
+  const result = await quickCheck(items, opts);
+  done();
 
   if (args.json) {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
@@ -238,9 +259,9 @@ async function runDocument(args: Args): Promise<number> {
   let doc: CheckDocumentResult;
   try {
     process.stderr.write(dim(`Extracting references from ${args.file}…\n`));
-    const prog = makeProgress();
-    doc = await checkDocument({ bytes, filename: args.file! }, { onProgress: prog.onProgress });
-    prog.done();
+    const { opts, done } = progressFor(args.verbose);
+    doc = await checkDocument({ bytes, filename: args.file! }, opts);
+    done();
   } catch (err) {
     process.stderr.write(red(`${(err as Error).message}\n`));
     return 2;

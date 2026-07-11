@@ -100,6 +100,7 @@ cat refs.bib | citecheck -
 | Option | What it does |
 | --- | --- |
 | `-w, --wizard` | Guided, interactive mode: pick a file, choose options, and run. Also the default when you run `citecheck` with no file. |
+| `-V, --verbose` | Stream every reference and its verdict live as it's checked, instead of a quiet progress counter. |
 | `--json` | Print the full result as JSON (for scripts / CI). |
 | `--csv` | Print a spreadsheet-friendly CSV report (opens directly in Excel). |
 | `--only-issues` | Hide references that checked out clean. |

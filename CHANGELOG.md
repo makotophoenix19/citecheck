@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.5] - 2026-07-11 — Houston Methodist edition
+
+### Added
+
+- **Verbose "watch it work" mode** (`--verbose` / `-V`): streams one line per
+  reference as it's checked — a running counter, a colored status glyph, the
+  title, and a retracted flag — instead of the quiet progress counter. On a big
+  catalog the lines fly by, which reads well in a demo. The wizard adds a "While
+  it checks" choice (live stream vs quiet bar).
+- `quickCheck` / `checkDocument` gained an `onResult` callback (fires per
+  reference, in order) alongside the existing `onProgress`.
+
 ## [1.0.4] - 2026-07-11 — Houston Methodist edition
 
 Reworks the wizard's file selection for arrow-key navigation and, importantly,

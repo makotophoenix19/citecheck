@@ -10,7 +10,7 @@ import { quickCheck, type CitationCheckResult } from "./quick-check.js";
 import { checkDocument } from "./document.js";
 import { formatOf } from "./ingest/index.js";
 import { toCsv, count } from "./report.js";
-import { makeProgress } from "./progress.js";
+import { makeProgress, verboseLine } from "./progress.js";
 import { loadConfig, saveMailto, saveStartDir } from "./config.js";
 import type { CslItemData } from "./types.js";
 
@@ -150,9 +150,18 @@ export async function runWizard(): Promise<number> {
     });
     if (strict) process.env.CITECHECK_STRICT = "1";
 
+    // 3b ── how to watch it run ----------------------------------------------
+    const live = await select<boolean>({
+      message: "While it checks:",
+      choices: [
+        { name: "Show each reference as it's checked (great for a demo)", value: true },
+        { name: "A quiet progress bar", value: false },
+      ],
+    });
+
     // 4 ── run ----------------------------------------------------------------
     process.stdout.write("\n" + dim("  Checking against Crossref, PubMed, OpenAlex and DOAJ. Nothing leaves your machine except each reference string.\n\n"));
-    const citations = await runCheck(filePath);
+    const citations = await runCheck(filePath, live);
     if (citations === null) { process.stdout.write(red("  I couldn't find any references in that file.\n")); return 2; }
 
     // 5 ── report -------------------------------------------------------------
@@ -175,18 +184,24 @@ export async function runWizard(): Promise<number> {
   }
 }
 
-async function runCheck(filePath: string): Promise<CitationCheckResult[] | null> {
+async function runCheck(filePath: string, live: boolean): Promise<CitationCheckResult[] | null> {
+  // Verbose stream to stdout, or a quiet spinner on stderr.
   const prog = makeProgress();
+  const opts = live
+    ? { onResult: (r: CitationCheckResult, d: number, t: number) => process.stdout.write("  " + verboseLine(r, d, t, useColor) + "\n") }
+    : { onProgress: prog.onProgress };
+  const finish = live ? () => {} : prog.done;
+
   if (formatOf(filePath) !== null) {
-    const doc = await checkDocument({ bytes: readFileSync(filePath), filename: filePath }, { onProgress: prog.onProgress });
-    prog.done();
+    const doc = await checkDocument({ bytes: readFileSync(filePath), filename: filePath }, opts);
+    finish();
     return doc.result.citations.length ? doc.result.citations : null;
   }
   const items: CslItemData[] = detectAndParse(filePath, readFileSync(filePath, "utf8"));
-  if (!items.length) { prog.done(); return null; }
+  if (!items.length) { finish(); return null; }
   process.stdout.write(dim(`  Found ${items.length} references.\n\n`));
-  const result = await quickCheck(items, { onProgress: prog.onProgress });
-  prog.done();
+  const result = await quickCheck(items, opts);
+  finish();
   return result.citations;
 }
 
