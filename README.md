@@ -76,6 +76,12 @@ spreadsheet, or an on-screen list of problems):
 citecheck
 ```
 
+The wizard doesn't just list verdicts — it produces a plain-language **analysis**
+("what this means / what to do", with the short list that actually needs
+attention), delivered as an on-screen summary, an **Excel workbook** (a Summary
+tab, a filterable table of every reference, and a "Needs a look" tab), and a
+**one-page HTML report** you can print to PDF for leadership.
+
 Or check a file directly:
 
 ```sh

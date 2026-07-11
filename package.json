@@ -1,6 +1,6 @@
 {
   "name": "citecheck",
-  "version": "1.0.5",
+  "version": "1.1.0",
   "description": "Check whether the references in your .bib / .ris / CSL-JSON bibliography actually exist and haven't been retracted, and see which sources are in DOAJ-listed open-access journals — using Crossref, PubMed, OpenAlex and DOAJ. No API key, no signup.",
   "type": "module",
   "bin": {
@@ -67,6 +67,7 @@
     "@inquirer/select": "^5.2.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@retorquere/bibtex-parser": "^10.0.0",
+    "exceljs": "^4.4.0",
     "mammoth": "^1.12.0",
     "zod": "^3.25.0"
   },

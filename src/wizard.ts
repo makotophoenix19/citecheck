@@ -9,9 +9,12 @@ import { detectAndParse } from "./parse-bibliography.js";
 import { quickCheck, type CitationCheckResult } from "./quick-check.js";
 import { checkDocument } from "./document.js";
 import { formatOf } from "./ingest/index.js";
-import { toCsv, count } from "./report.js";
 import { makeProgress, verboseLine } from "./progress.js";
 import { loadConfig, saveMailto, saveStartDir } from "./config.js";
+import { analyze } from "./analysis.js";
+import { renderAnalysisText } from "./report-text.js";
+import { renderAnalysisHtml } from "./report-html.js";
+import { writeXlsx } from "./report-xlsx.js";
 import type { CslItemData } from "./types.js";
 
 // ── small color helpers (for the summary; the menus are styled by Inquirer) ──
@@ -132,11 +135,13 @@ export async function runWizard(): Promise<number> {
     process.stdout.write(`  ${green("✓")} ${basename(filePath)}\n`);
 
     // 2 ── output format ------------------------------------------------------
-    const wantExcel = await select<boolean>({
+    const output = await select<"all" | "excel" | "report" | "screen">({
       message: "How would you like the results?",
       choices: [
-        { name: "An Excel spreadsheet (recommended)", value: true },
-        { name: "On screen — just the problems", value: false },
+        { name: "Everything — one-page report + Excel + on-screen (recommended)", value: "all" },
+        { name: "Excel workbook (Summary + filterable data + a flagged tab)", value: "excel" },
+        { name: "One-page report (opens in your browser; print to PDF)", value: "report" },
+        { name: "On screen only", value: "screen" },
       ],
     });
 
@@ -161,20 +166,29 @@ export async function runWizard(): Promise<number> {
 
     // 4 ── run ----------------------------------------------------------------
     process.stdout.write("\n" + dim("  Checking against Crossref, PubMed, OpenAlex and DOAJ. Nothing leaves your machine except each reference string.\n\n"));
-    const citations = await runCheck(filePath, live);
-    if (citations === null) { process.stdout.write(red("  I couldn't find any references in that file.\n")); return 2; }
+    const checked = await runCheck(filePath, live);
+    if (!checked) { process.stdout.write(red("  I couldn't find any references in that file.\n")); return 2; }
 
-    // 5 ── report -------------------------------------------------------------
-    printSummary(citations, filePath);
-    if (wantExcel) {
-      const out = join(dirname(filePath), basename(filePath, extname(filePath)) + ".citecheck.csv");
-      writeFileSync(out, toCsv(citations));
-      process.stdout.write(`\n  ${green("✓")} Spreadsheet saved: ${bold(out)}\n`);
-      spawn("open", [out], { stdio: "ignore", detached: true }).on("error", () => {}).unref();
-      process.stdout.write(dim("  Opening it for you…\n"));
-    } else {
-      printIssues(citations);
+    // 5 ── analysis + report --------------------------------------------------
+    const analysis = analyze(checked.citations, checked.items);
+    process.stdout.write(renderAnalysisText(analysis, useColor)); // the "what it means" always shows
+
+    const base = join(dirname(filePath), basename(filePath, extname(filePath)) + ".citecheck");
+    const openFile = (p: string) => spawn("open", [p], { stdio: "ignore", detached: true }).on("error", () => {}).unref();
+
+    if (output === "excel" || output === "all") {
+      const p = base + ".xlsx";
+      await writeXlsx(checked.citations, analysis, basename(filePath), p);
+      process.stdout.write(`  ${green("✓")} Excel workbook: ${bold(p)}\n`);
+      openFile(p);
     }
+    if (output === "report" || output === "all") {
+      const p = base + ".html";
+      writeFileSync(p, renderAnalysisHtml(analysis, basename(filePath)));
+      process.stdout.write(`  ${green("✓")} One-page report: ${bold(p)}\n`);
+      openFile(p);
+    }
+    if (output !== "screen") process.stdout.write(dim("  Opening it for you…\n"));
     process.stdout.write("\n");
     return 0;
   } catch (err) {
@@ -184,7 +198,7 @@ export async function runWizard(): Promise<number> {
   }
 }
 
-async function runCheck(filePath: string, live: boolean): Promise<CitationCheckResult[] | null> {
+async function runCheck(filePath: string, live: boolean): Promise<{ citations: CitationCheckResult[]; items?: CslItemData[] } | null> {
   // Verbose stream to stdout, or a quiet spinner on stderr.
   const prog = makeProgress();
   const opts = live
@@ -195,36 +209,12 @@ async function runCheck(filePath: string, live: boolean): Promise<CitationCheckR
   if (formatOf(filePath) !== null) {
     const doc = await checkDocument({ bytes: readFileSync(filePath), filename: filePath }, opts);
     finish();
-    return doc.result.citations.length ? doc.result.citations : null;
+    return doc.result.citations.length ? { citations: doc.result.citations } : null;
   }
   const items: CslItemData[] = detectAndParse(filePath, readFileSync(filePath, "utf8"));
   if (!items.length) { finish(); return null; }
   process.stdout.write(dim(`  Found ${items.length} references.\n\n`));
   const result = await quickCheck(items, opts);
   finish();
-  return result.citations;
-}
-
-function printSummary(citations: CitationCheckResult[], filePath: string): void {
-  const s = count(citations);
-  const review = s.partial + s.suspicious;
-  process.stdout.write(bold(`  Results for ${basename(filePath)}\n`));
-  process.stdout.write(`  ${green(s.verified + " verified")}   ${amber(review + " to review")}   ${red(s.notFound + " not found")}`);
-  if (s.checkFailed) process.stdout.write(dim(`   ${s.checkFailed} couldn't reach (re-run)`));
-  if (s.retracted) process.stdout.write(`   ${red(bold(s.retracted + " RETRACTED"))}`);
-  process.stdout.write("\n");
-  process.stdout.write(dim(`  ${s.openAccess} open-access · ${s.total} references checked\n`));
-}
-
-function printIssues(citations: CitationCheckResult[]): void {
-  const flagged = citations.filter((r) => r.status !== "verified" || r.retracted);
-  if (!flagged.length) { process.stdout.write("\n" + green("  Everything checked out. No problems found.\n")); return; }
-  process.stdout.write("\n" + bold(`  ${flagged.length} to look at:\n`));
-  const sym: Record<string, string> = { partial_match: amber("~"), suspicious: amber("?"), not_found: red("✗"), check_failed: dim("…"), verified: green("✓") };
-  for (const r of flagged.slice(0, 40)) {
-    const flag = r.retracted ? " " + red(bold("⚠ RETRACTED")) : "";
-    process.stdout.write(`   ${sym[r.status] ?? "?"}  ${(r.title || r.sourceRef || r.key || "").slice(0, 66)}${flag}\n`);
-    if (r.warnings[0]) process.stdout.write(dim(`       ${r.warnings[0]}\n`));
-  }
-  if (flagged.length > 40) process.stdout.write(dim(`   … and ${flagged.length - 40} more (choose the spreadsheet option to see them all).\n`));
+  return { citations: result.citations, items };
 }

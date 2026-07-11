@@ -4,6 +4,30 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-07-11 — Houston Methodist edition
+
+Answers the "okay, so what do we do with this?" question. Every run now produces
+a plain-language **analysis** — not just per-reference verdicts — that says what
+the results mean and what to do about them. Deterministic (no AI); a Claude-
+written narrative layer is planned as an opt-in follow-up.
+
+### Added
+
+- **Analysis engine** (`src/analysis.ts`): root-causes the results into buckets
+  (verified, verified-despite-1-year-gap, found-with-minor-mismatch, not-found,
+  retracted, couldn't-reach), computes the DOI-bearing found rate, and generates
+  a plain-language "what this means" + "what to do" with the short list that
+  actually needs attention (retracted and not-found first).
+- **Three report outputs** (chosen in the wizard):
+  - **On-screen** — the analysis printed in the terminal after a run.
+  - **Excel workbook** (`.xlsx` via exceljs) — a **Summary** tab (the analysis),
+    an **All references** tab as a filterable Excel Table (sort/filter to find the
+    troublemakers), and a **Needs a look** tab with only the flagged rows. Status
+    is color-coded; a "Needs attention" column filters to retracted/not-found.
+  - **One-page HTML report** — print-to-PDF, leadership-ready (headline, stat
+    tiles, what-it-means, what-to-do, and the flagged table).
+- The wizard's output menu is now "Everything / Excel / Report / On-screen".
+
 ## [1.0.5] - 2026-07-11 — Houston Methodist edition
 
 ### Added
