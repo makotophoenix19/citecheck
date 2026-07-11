@@ -4,6 +4,27 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2026-07-11 — Houston Methodist edition
+
+Fixes the "Could not reach Crossref — re-run" noise seen when checking a large
+catalog without the polite-pool email set. Those were transient rate-limit
+failures (correctly reported as "check failed", never "not found"), but they
+made a clean run look messy.
+
+### Added
+
+- **Remembered polite-pool email.** The wizard asks for it once (framed as
+  optional, never shared, no mail sent) and saves it to
+  `~/.config/citecheck/config.json`; `--mailto` also persists it. Every later
+  run — wizard or direct — then uses it automatically, so Crossref/PubMed grant
+  the faster, kinder rate limits and the transient failures largely disappear.
+
+### Changed
+
+- **Hardened retry/backoff.** Transient 429/5xx responses now honor a
+  `Retry-After` header when present, and otherwise back off exponentially with
+  jitter across a few attempts before giving up.
+
 ## [1.0.2] - 2026-07-11 — Houston Methodist edition
 
 Usability release aimed at a non-technical demo: run `citecheck` with no

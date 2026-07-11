@@ -11,6 +11,7 @@ import { checkDocument } from "./document.js";
 import { formatOf } from "./ingest/index.js";
 import { toCsv, count } from "./report.js";
 import { makeProgress } from "./progress.js";
+import { loadConfig, saveMailto } from "./config.js";
 import type { CslItemData } from "./types.js";
 
 // ── small color helpers (interactive only) ──────────────────────────────────
@@ -83,6 +84,23 @@ export async function runWizard(): Promise<number> {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
   try {
+    // 0 ── polite-pool email (asked once, then remembered) --------------------
+    if (!process.env.CITECHECK_MAILTO) {
+      const saved = loadConfig().mailto;
+      if (saved) {
+        process.env.CITECHECK_MAILTO = saved;
+      } else {
+        process.stdout.write(dim("  One-time setup. Crossref and PubMed give faster, kinder rate limits\n  when they know who's calling — it avoids the odd \"couldn't reach Crossref\".\n"));
+        const email = await ask(rl, "  Your email (never shared; no mail is sent; press enter to skip): ");
+        if (email && email.includes("@")) {
+          process.env.CITECHECK_MAILTO = email;
+          saveMailto(email);
+          process.stdout.write(green("  ✓ Saved — you won't be asked again.\n"));
+        }
+        process.stdout.write("\n");
+      }
+    }
+
     // 1 ── choose a file ------------------------------------------------------
     process.stdout.write(bold("  Let's check a bibliography.\n\n"));
     const cands = findCandidates();

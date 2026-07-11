@@ -69,15 +69,21 @@ export interface FetchOpts {
   retries?: number;
 }
 
+/** Exponential backoff with jitter, capped, for transient (429/5xx) retries. */
+function backoffMs(attempt: number): number {
+  return Math.min(3000, 400 * 2 ** attempt) + Math.floor(Math.random() * 250);
+}
+
 /**
  * `fetch` with retry on *transient* failures (HTTP 429, 5xx, network errors,
- * timeouts). After the retries are exhausted on a transient failure it THROWS,
- * so callers can tell "couldn't reach the API" apart from a definitive answer.
- * A clean response — including a definitive 4xx like 404 — is returned as-is for
- * the caller to interpret.
+ * timeouts). Rate-limit responses (429/503) honor a `Retry-After` header when
+ * present, else back off exponentially. After the retries are exhausted it
+ * THROWS, so callers can tell "couldn't reach the API" apart from a definitive
+ * answer. A clean response — including a definitive 4xx like 404 — is returned
+ * as-is for the caller to interpret.
  */
 export async function fetchRetry(url: string, opts: FetchOpts = {}): Promise<Response> {
-  const { headers, timeoutMs = 10_000, retries = 2 } = opts;
+  const { headers, timeoutMs = 10_000, retries = 3 } = opts;
   let lastErr: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -85,7 +91,11 @@ export async function fetchRetry(url: string, opts: FetchOpts = {}): Promise<Res
       if (res.status === 429 || res.status >= 500) {
         lastErr = new Error(`transient HTTP ${res.status}`);
         if (attempt < retries) {
-          await sleep(300 * (attempt + 1) ** 2);
+          const retryAfter = Number(res.headers.get("retry-after"));
+          const wait = Number.isFinite(retryAfter) && retryAfter > 0
+            ? Math.min(retryAfter * 1000, 15_000)
+            : backoffMs(attempt);
+          await sleep(wait);
           continue;
         }
         throw lastErr;
@@ -94,7 +104,7 @@ export async function fetchRetry(url: string, opts: FetchOpts = {}): Promise<Res
     } catch (e) {
       lastErr = e;
       if (attempt < retries) {
-        await sleep(300 * (attempt + 1) ** 2);
+        await sleep(backoffMs(attempt));
         continue;
       }
       throw lastErr;

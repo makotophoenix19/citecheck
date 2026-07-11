@@ -98,7 +98,7 @@ test("Crossref unreachable => check_failed", async () => {
   globalThis.fetch = (async () => { throw new Error("network down"); }) as typeof fetch;
   const r = await checkFreeTextRef("Watson JD. Molecular structure of nucleic acids. 1953.");
   expect(r.status).toBe("check_failed");
-});
+}, 15_000); // exercises the full retry+backoff path before giving up
 
 test("partial_match: retains title/match, warns, and still enriches via OpenAlex/DOAJ", async () => {
   // Raw ref overlaps the candidate title at ~0.5 (molecular, structure of

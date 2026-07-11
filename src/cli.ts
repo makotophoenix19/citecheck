@@ -9,6 +9,7 @@ import { printBanner } from "./banner.js";
 import { toCsv } from "./report.js";
 import { makeProgress } from "./progress.js";
 import { runWizard } from "./wizard.js";
+import { loadConfig, saveMailto } from "./config.js";
 
 const USE_COLOR = Boolean(process.stdout.isTTY) && !process.env.NO_COLOR;
 const c = (code: string, s: string) => (USE_COLOR ? `\x1b[${code}m${s}\x1b[0m` : s);
@@ -290,7 +291,13 @@ async function main(): Promise<number> {
   const args = parseArgs(process.argv.slice(2));
   if (args.version) { process.stdout.write(VERSION + "\n"); return 0; }
   if (args.help) { printBanner(); process.stdout.write(HELP); return 0; }
-  if (args.mailto) process.env.CITECHECK_MAILTO = args.mailto;
+  // Polite-pool email: CLI flag wins and is remembered; otherwise fall back to a
+  // previously saved one so every run gets the faster, kinder rate limits.
+  if (args.mailto) { process.env.CITECHECK_MAILTO = args.mailto; saveMailto(args.mailto); }
+  else if (!process.env.CITECHECK_MAILTO) {
+    const saved = loadConfig().mailto;
+    if (saved) process.env.CITECHECK_MAILTO = saved;
+  }
   if (args.strict) process.env.CITECHECK_STRICT = "1";
 
   // Guided mode: explicit --wizard, or a bare interactive launch with no file.
