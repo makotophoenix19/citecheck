@@ -298,9 +298,11 @@ async function runDocument(args: Args): Promise<number> {
 
 async function main(): Promise<number> {
   const args = parseArgs(process.argv.slice(2));
-  if (args.help) { process.stdout.write(HELP); return 0; }
   if (args.version) { process.stdout.write(VERSION + "\n"); return 0; }
-  if (!args.file) { process.stderr.write(HELP); return 2; }
+  // Bare launch or --help: greet with the banner, then show usage. This is the
+  // "just open it" screen.
+  if (args.help) { printBanner(); process.stdout.write(HELP); return 0; }
+  if (!args.file) { printBanner(); process.stdout.write(HELP); return 0; }
   if (args.mailto) process.env.CITECHECK_MAILTO = args.mailto;
   if (args.strict) process.env.CITECHECK_STRICT = "1";
 
