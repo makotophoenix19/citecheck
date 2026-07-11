@@ -67,9 +67,10 @@ Requires Node.js 18 or newer.
 
 ## Usage
 
-Run it with **no arguments** for a guided wizard — it lists the bibliography
-files in your current folder and Downloads, lets you pick one, and asks how you'd
-like the results (an Excel spreadsheet, or an on-screen list of problems):
+Run it with **no arguments** for a guided wizard — it opens an arrow-key file
+browser (in a folder you choose and it remembers, so nothing from elsewhere is
+surfaced), lets you pick a file, and asks how you'd like the results (an Excel
+spreadsheet, or an on-screen list of problems):
 
 ```sh
 citecheck

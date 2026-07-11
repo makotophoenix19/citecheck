@@ -4,6 +4,28 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-07-11 — Houston Methodist edition
+
+Reworks the wizard's file selection for arrow-key navigation and, importantly,
+privacy: it no longer auto-scans Downloads and Desktop and dump every file
+title. That matters when demoing to someone who shouldn't see unrelated,
+not-yet-ready work.
+
+### Changed
+
+- **Arrow-key file browser.** Instead of listing files from several folders at
+  once, the wizard opens a browser in a single folder that you navigate with the
+  arrow keys (↑/↓ to move, Enter to open a folder or pick a file, a ".." entry to
+  go up, plus "type a path" and "go home"). Only the folder you're in is ever
+  read, so nothing from elsewhere is surfaced on screen.
+- **Remembered folder.** The folder you last picked a file from is saved to
+  `~/.config/citecheck/config.json` and the browser reopens there next time, so
+  you can point it at a safe, curated folder once and stay there.
+- The wizard's option prompts (output format, year matching, email) are now
+  arrow-key menus too, via `@inquirer/select` / `@inquirer/input`.
+- The wizard requires an interactive terminal; scripted/piped use should pass a
+  file directly (`citecheck <file>`), which is unchanged.
+
 ## [1.0.3] - 2026-07-11 — Houston Methodist edition
 
 Fixes the "Could not reach Crossref — re-run" noise seen when checking a large

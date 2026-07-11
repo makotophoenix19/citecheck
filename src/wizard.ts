@@ -1,6 +1,6 @@
-import * as readline from "node:readline/promises";
-import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
-import { writeFileSync } from "node:fs";
+import select from "@inquirer/select";
+import input from "@inquirer/input";
+import { readFileSync, readdirSync, statSync, existsSync, writeFileSync } from "node:fs";
 import { join, extname, basename, dirname, resolve } from "node:path";
 import { homedir } from "node:os";
 import { spawn } from "node:child_process";
@@ -11,48 +11,19 @@ import { checkDocument } from "./document.js";
 import { formatOf } from "./ingest/index.js";
 import { toCsv, count } from "./report.js";
 import { makeProgress } from "./progress.js";
-import { loadConfig, saveMailto } from "./config.js";
+import { loadConfig, saveMailto, saveStartDir } from "./config.js";
 import type { CslItemData } from "./types.js";
 
-// ── small color helpers (interactive only) ──────────────────────────────────
+// ── small color helpers (for the summary; the menus are styled by Inquirer) ──
 const useColor = process.stdout.isTTY && !process.env.NO_COLOR;
-const c = (code: string, s: string) => (useColor ? `${code}${s}\x1b[0m` : s);
-const teal = (s: string) => c("\x1b[38;2;20;160;146m", s);
-const green = (s: string) => c("\x1b[32m", s);
-const amber = (s: string) => c("\x1b[33m", s);
-const red = (s: string) => c("\x1b[31m", s);
-const dim = (s: string) => c("\x1b[2m", s);
-const bold = (s: string) => c("\x1b[1m", s);
+const cc = (code: string, s: string) => (useColor ? `${code}${s}\x1b[0m` : s);
+const green = (s: string) => cc("\x1b[32m", s);
+const amber = (s: string) => cc("\x1b[33m", s);
+const red = (s: string) => cc("\x1b[31m", s);
+const dim = (s: string) => cc("\x1b[2m", s);
+const bold = (s: string) => cc("\x1b[1m", s);
 
 const READABLE = new Set([".csv", ".bib", ".bibtex", ".ris", ".json", ".docx", ".txt", ".md"]);
-
-interface Candidate { path: string; mtime: number; size: number; where: string }
-
-/** Bibliography-ish files in the current folder, ~/Downloads and ~/Desktop, newest first. */
-function findCandidates(): Candidate[] {
-  const dirs: [string, string][] = [
-    [process.cwd(), "here"],
-    [join(homedir(), "Downloads"), "Downloads"],
-    [join(homedir(), "Desktop"), "Desktop"],
-  ];
-  const seen = new Set<string>();
-  const out: Candidate[] = [];
-  for (const [d, where] of dirs) {
-    let names: string[] = [];
-    try { names = readdirSync(d); } catch { continue; }
-    for (const n of names) {
-      if (!READABLE.has(extname(n).toLowerCase())) continue;
-      const p = join(d, n);
-      if (seen.has(p)) continue;
-      let st;
-      try { st = statSync(p); } catch { continue; }
-      if (!st.isFile()) continue;
-      seen.add(p);
-      out.push({ path: p, mtime: st.mtimeMs, size: st.size, where });
-    }
-  }
-  return out.sort((a, b) => b.mtime - a.mtime).slice(0, 12);
-}
 
 function humanSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -62,130 +33,156 @@ function humanSize(bytes: number): string {
 
 function humanDate(ms: number): string {
   const d = new Date(ms);
-  // Always show the year — an old export may be exactly the one you want.
   const md = d.toLocaleString("en-US", { month: "short", day: "2-digit" });
   const time = d.toLocaleString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
   return `${md}, ${d.getFullYear()} ${time}`;
 }
 
-async function ask(rl: readline.Interface, prompt: string, fallback = ""): Promise<string> {
-  try {
-    const a = (await rl.question(prompt)).trim();
-    return a || fallback;
-  } catch {
-    return fallback; // stdin closed (e.g. piped input ran out)
+interface Entry { name: string; path: string; mtime: number; size: number }
+
+/** Directories (for navigation) and readable files in one folder. Dotfiles
+ * hidden; folders A→Z; files newest first. Only ever reads the folder you're in. */
+function listFolder(folder: string): { dirs: Entry[]; files: Entry[] } {
+  const dirs: Entry[] = [];
+  const files: Entry[] = [];
+  let names: string[] = [];
+  try { names = readdirSync(folder); } catch { return { dirs, files }; }
+  for (const n of names) {
+    if (n.startsWith(".")) continue;
+    const p = join(folder, n);
+    let st;
+    try { st = statSync(p); } catch { continue; }
+    if (st.isDirectory()) dirs.push({ name: n, path: p, mtime: st.mtimeMs, size: 0 });
+    else if (st.isFile() && READABLE.has(extname(n).toLowerCase())) files.push({ name: n, path: p, mtime: st.mtimeMs, size: st.size });
+  }
+  dirs.sort((a, b) => a.name.localeCompare(b.name));
+  files.sort((a, b) => b.mtime - a.mtime);
+  return { dirs, files };
+}
+
+type Pick =
+  | { t: "up" } | { t: "dir"; p: string } | { t: "file"; p: string }
+  | { t: "type" } | { t: "home" } | { t: "cancel" };
+
+/** Arrow-key file browser. Starts in `start` and only shows the folder you are
+ * in — nothing is auto-scanned from elsewhere. */
+async function browseForFile(start: string): Promise<string | null> {
+  let folder = existsSync(start) ? start : homedir();
+  for (;;) {
+    const { dirs, files } = listFolder(folder);
+    const parent = dirname(folder);
+    const choices: { name: string; value: Pick }[] = [];
+    if (parent !== folder) choices.push({ name: "⬆   .. (up a folder)", value: { t: "up" } });
+    for (const d of dirs) choices.push({ name: `📁  ${d.name}/`, value: { t: "dir", p: d.path } });
+    for (const f of files) choices.push({ name: `📄  ${f.name}   ${humanSize(f.size)} · ${humanDate(f.mtime)}`, value: { t: "file", p: f.path } });
+    if (!dirs.length && !files.length) choices.push({ name: dim("(no folders or readable files here)"), value: { t: "up" } });
+    choices.push({ name: "⌨   Type a full path instead…", value: { t: "type" } });
+    choices.push({ name: "🏠  Go to my home folder", value: { t: "home" } });
+    choices.push({ name: "✕   Cancel", value: { t: "cancel" } });
+
+    const pick = await select<Pick>({
+      message: `Browse to your file   ${dim(folder)}`,
+      choices,
+      pageSize: 14,
+      loop: false,
+    });
+
+    if (pick.t === "up") folder = parent;
+    else if (pick.t === "home") folder = homedir();
+    else if (pick.t === "dir") folder = pick.p;
+    else if (pick.t === "cancel") return null;
+    else if (pick.t === "file") return pick.p;
+    else if (pick.t === "type") {
+      const typed = (await input({ message: "Full path to the file:" })).trim().replace(/^['"]|['"]$/g, "");
+      const rp = resolve(typed.replace(/^~(?=\/)/, homedir()));
+      if (existsSync(rp) && statSync(rp).isFile()) return rp;
+      if (existsSync(rp) && statSync(rp).isDirectory()) folder = rp; // typed a folder → browse it
+      // else: not found — fall through and re-show the current folder
+    }
   }
 }
 
-/** Interactive, talkative run. Walk the user through choosing a file and a few
- * options, then check with a live progress indicator. */
+/** Guided, talkative run: browse to a file, choose options, check with progress. */
 export async function runWizard(): Promise<number> {
   printBanner();
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    process.stdout.write("  The guided wizard needs an interactive terminal.\n  To check a file directly:  citecheck <file>\n");
+    return 2;
+  }
 
   try {
     // 0 ── polite-pool email (asked once, then remembered) --------------------
     if (!process.env.CITECHECK_MAILTO) {
       const saved = loadConfig().mailto;
-      if (saved) {
-        process.env.CITECHECK_MAILTO = saved;
-      } else {
-        process.stdout.write(dim("  One-time setup. Crossref and PubMed give faster, kinder rate limits\n  when they know who's calling — it avoids the odd \"couldn't reach Crossref\".\n"));
-        const email = await ask(rl, "  Your email (never shared; no mail is sent; press enter to skip): ");
-        if (email && email.includes("@")) {
-          process.env.CITECHECK_MAILTO = email;
-          saveMailto(email);
-          process.stdout.write(green("  ✓ Saved — you won't be asked again.\n"));
-        }
-        process.stdout.write("\n");
+      if (saved) process.env.CITECHECK_MAILTO = saved;
+      else {
+        const email = (await input({
+          message: "Your email (optional — for faster rate limits from Crossref/PubMed; never shared, no mail sent):",
+          default: "",
+        })).trim();
+        if (email.includes("@")) { process.env.CITECHECK_MAILTO = email; saveMailto(email); }
       }
     }
 
-    // 1 ── choose a file ------------------------------------------------------
-    process.stdout.write(bold("  Let's check a bibliography.\n\n"));
-    const cands = findCandidates();
-    let filePath = "";
-    if (cands.length) {
-      process.stdout.write(dim("  Files I can read, from this folder, Downloads and Desktop:\n\n"));
-      const nameWidth = Math.min(52, Math.max(...cands.map((f) => basename(f.path).length)));
-      cands.forEach((f, i) => {
-        const name = basename(f.path).padEnd(nameWidth);
-        const meta = `${humanSize(f.size).padStart(7)}  ${humanDate(f.mtime).padStart(18)}  ${f.where}`;
-        process.stdout.write(`   ${teal(String(i + 1).padStart(2))}  ${name}   ${dim(meta)}\n`);
-      });
-      process.stdout.write("\n");
-      const pick = await ask(rl, `  Pick a number ${dim("[1]")}, or paste a full path: `, "1");
-      if (/^\d+$/.test(pick) && Number(pick) >= 1 && Number(pick) <= cands.length) {
-        filePath = cands[Number(pick) - 1]!.path;
-      } else {
-        filePath = pick.replace(/^['"]|['"]$/g, "");
-      }
-    } else {
-      filePath = (await ask(rl, "  Paste the full path to a .csv / .bib / .ris / .json / .docx file: ")).replace(/^['"]|['"]$/g, "");
-    }
-    filePath = resolve(filePath.replace(/^~(?=\/)/, homedir()));
-    if (!existsSync(filePath)) {
-      process.stdout.write(red(`\n  Can't find that file: ${filePath}\n`));
-      return 2;
-    }
-    process.stdout.write(`\n  ${green("✓")} ${basename(filePath)}\n\n`);
+    // 1 ── browse to a file ---------------------------------------------------
+    const start = loadConfig().startDir || homedir();
+    const filePath = await browseForFile(start);
+    if (!filePath) { process.stdout.write(dim("\n  Cancelled.\n")); return 0; }
+    saveStartDir(dirname(filePath)); // reopen here next time
+    process.stdout.write(`  ${green("✓")} ${basename(filePath)}\n`);
 
     // 2 ── output format ------------------------------------------------------
-    process.stdout.write("  How would you like the results?\n");
-    process.stdout.write(`   ${teal("1")}  An Excel spreadsheet ${dim("(recommended)")}\n`);
-    process.stdout.write(`   ${teal("2")}  On screen, just the problems\n`);
-    const outChoice = await ask(rl, `  Choose ${dim("[1]")}: `, "1");
-    const wantExcel = outChoice !== "2";
+    const wantExcel = await select<boolean>({
+      message: "How would you like the results?",
+      choices: [
+        { name: "An Excel spreadsheet (recommended)", value: true },
+        { name: "On screen — just the problems", value: false },
+      ],
+    });
 
     // 3 ── year matching ------------------------------------------------------
-    process.stdout.write("\n  Publication-year matching:\n");
-    process.stdout.write(`   ${teal("1")}  Normal ${dim("(recommended — tolerates the usual online-vs-issue 1-year gap)")}\n`);
-    process.stdout.write(`   ${teal("2")}  Strict ${dim("(exact year; re-flags many real papers)")}\n`);
-    const yr = await ask(rl, `  Choose ${dim("[1]")}: `, "1");
-    if (yr === "2") process.env.CITECHECK_STRICT = "1";
+    const strict = await select<boolean>({
+      message: "Publication-year matching",
+      choices: [
+        { name: "Normal (recommended — tolerates the usual 1-year online-vs-issue gap)", value: false },
+        { name: "Strict (exact year; re-flags many real papers)", value: true },
+      ],
+    });
+    if (strict) process.env.CITECHECK_STRICT = "1";
 
     // 4 ── run ----------------------------------------------------------------
     process.stdout.write("\n" + dim("  Checking against Crossref, PubMed, OpenAlex and DOAJ. Nothing leaves your machine except each reference string.\n\n"));
-
     const citations = await runCheck(filePath);
-    if (citations === null) {
-      process.stdout.write(red("  I couldn't find any references in that file.\n"));
-      return 2;
-    }
+    if (citations === null) { process.stdout.write(red("  I couldn't find any references in that file.\n")); return 2; }
 
     // 5 ── report -------------------------------------------------------------
     printSummary(citations, filePath);
-
     if (wantExcel) {
       const out = join(dirname(filePath), basename(filePath, extname(filePath)) + ".citecheck.csv");
       writeFileSync(out, toCsv(citations));
       process.stdout.write(`\n  ${green("✓")} Spreadsheet saved: ${bold(out)}\n`);
-      try {
-        spawn("open", [out], { stdio: "ignore", detached: true }).on("error", () => {}).unref();
-        process.stdout.write(dim("  Opening it for you…\n"));
-      } catch { /* non-macOS or no opener — the path above is enough */ }
+      spawn("open", [out], { stdio: "ignore", detached: true }).on("error", () => {}).unref();
+      process.stdout.write(dim("  Opening it for you…\n"));
     } else {
       printIssues(citations);
     }
     process.stdout.write("\n");
     return 0;
-  } finally {
-    rl.close();
+  } catch (err) {
+    // Ctrl-C / Esc from a prompt throws; treat as a clean cancel.
+    if ((err as Error)?.name === "ExitPromptError") { process.stdout.write(dim("\n  Cancelled.\n")); return 0; }
+    throw err;
   }
 }
 
-/** Load a file (CSV/bib/ris/json or docx/txt/md) and check it, with progress. */
 async function runCheck(filePath: string): Promise<CitationCheckResult[] | null> {
   const prog = makeProgress();
-  const docFormat = formatOf(filePath);
-  if (docFormat !== null) {
-    const bytes = readFileSync(filePath);
-    const doc = await checkDocument({ bytes, filename: filePath }, { onProgress: prog.onProgress });
+  if (formatOf(filePath) !== null) {
+    const doc = await checkDocument({ bytes: readFileSync(filePath), filename: filePath }, { onProgress: prog.onProgress });
     prog.done();
     return doc.result.citations.length ? doc.result.citations : null;
   }
-  const text = readFileSync(filePath, "utf8");
-  const items: CslItemData[] = detectAndParse(filePath, text);
+  const items: CslItemData[] = detectAndParse(filePath, readFileSync(filePath, "utf8"));
   if (!items.length) { prog.done(); return null; }
   process.stdout.write(dim(`  Found ${items.length} references.\n\n`));
   const result = await quickCheck(items, { onProgress: prog.onProgress });
@@ -197,26 +194,21 @@ function printSummary(citations: CitationCheckResult[], filePath: string): void 
   const s = count(citations);
   const review = s.partial + s.suspicious;
   process.stdout.write(bold(`  Results for ${basename(filePath)}\n`));
-  process.stdout.write(`  ${green(String(s.verified) + " verified")}   ${amber(String(review) + " to review")}   ${red(String(s.notFound) + " not found")}`);
-  if (s.retracted) process.stdout.write(`   ${red(bold(String(s.retracted) + " RETRACTED"))}`);
+  process.stdout.write(`  ${green(s.verified + " verified")}   ${amber(review + " to review")}   ${red(s.notFound + " not found")}`);
+  if (s.checkFailed) process.stdout.write(dim(`   ${s.checkFailed} couldn't reach (re-run)`));
+  if (s.retracted) process.stdout.write(`   ${red(bold(s.retracted + " RETRACTED"))}`);
   process.stdout.write("\n");
-  if (s.openAccess) process.stdout.write(dim(`  ${s.openAccess} open-access · `));
-  else process.stdout.write("  ");
-  process.stdout.write(dim(`${s.total} references checked\n`));
+  process.stdout.write(dim(`  ${s.openAccess} open-access · ${s.total} references checked\n`));
 }
 
 function printIssues(citations: CitationCheckResult[]): void {
   const flagged = citations.filter((r) => r.status !== "verified" || r.retracted);
-  if (!flagged.length) {
-    process.stdout.write("\n" + green("  Everything checked out. No problems found.\n"));
-    return;
-  }
+  if (!flagged.length) { process.stdout.write("\n" + green("  Everything checked out. No problems found.\n")); return; }
   process.stdout.write("\n" + bold(`  ${flagged.length} to look at:\n`));
   const sym: Record<string, string> = { partial_match: amber("~"), suspicious: amber("?"), not_found: red("✗"), check_failed: dim("…"), verified: green("✓") };
   for (const r of flagged.slice(0, 40)) {
     const flag = r.retracted ? " " + red(bold("⚠ RETRACTED")) : "";
-    const title = (r.title || r.sourceRef || r.key || "").slice(0, 68);
-    process.stdout.write(`   ${sym[r.status] ?? "?"}  ${title}${flag}\n`);
+    process.stdout.write(`   ${sym[r.status] ?? "?"}  ${(r.title || r.sourceRef || r.key || "").slice(0, 66)}${flag}\n`);
     if (r.warnings[0]) process.stdout.write(dim(`       ${r.warnings[0]}\n`));
   }
   if (flagged.length > 40) process.stdout.write(dim(`   … and ${flagged.length - 40} more (choose the spreadsheet option to see them all).\n`));
