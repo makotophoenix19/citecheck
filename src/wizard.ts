@@ -25,9 +25,9 @@ const bold = (s: string) => c("\x1b[1m", s);
 
 const READABLE = new Set([".csv", ".bib", ".bibtex", ".ris", ".json", ".docx", ".txt", ".md"]);
 
-interface Candidate { path: string; mtime: number; where: string }
+interface Candidate { path: string; mtime: number; size: number; where: string }
 
-/** Bibliography-ish files in the current folder and ~/Downloads, newest first. */
+/** Bibliography-ish files in the current folder, ~/Downloads and ~/Desktop, newest first. */
 function findCandidates(): Candidate[] {
   const dirs: [string, string][] = [
     [process.cwd(), "here"],
@@ -43,12 +43,26 @@ function findCandidates(): Candidate[] {
       if (!READABLE.has(extname(n).toLowerCase())) continue;
       const p = join(d, n);
       if (seen.has(p)) continue;
-      try { if (!statSync(p).isFile()) continue; } catch { continue; }
+      let st;
+      try { st = statSync(p); } catch { continue; }
+      if (!st.isFile()) continue;
       seen.add(p);
-      out.push({ path: p, mtime: statSync(p).mtimeMs, where });
+      out.push({ path: p, mtime: st.mtimeMs, size: st.size, where });
     }
   }
   return out.sort((a, b) => b.mtime - a.mtime).slice(0, 12);
+}
+
+function humanSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function humanDate(ms: number): string {
+  const d = new Date(ms);
+  const base = d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+  return d.getFullYear() === new Date().getFullYear() ? base : `${base} ${d.getFullYear()}`;
 }
 
 async function ask(rl: readline.Interface, prompt: string, fallback = ""): Promise<string> {
@@ -72,9 +86,12 @@ export async function runWizard(): Promise<number> {
     const cands = findCandidates();
     let filePath = "";
     if (cands.length) {
-      process.stdout.write(dim("  Files I can read, from this folder and your Downloads:\n\n"));
+      process.stdout.write(dim("  Files I can read, from this folder, Downloads and Desktop:\n\n"));
+      const nameWidth = Math.min(52, Math.max(...cands.map((f) => basename(f.path).length)));
       cands.forEach((f, i) => {
-        process.stdout.write(`   ${teal(String(i + 1).padStart(2))}  ${basename(f.path)}  ${dim("(" + f.where + ")")}\n`);
+        const name = basename(f.path).padEnd(nameWidth);
+        const meta = `${humanSize(f.size).padStart(7)}  ${humanDate(f.mtime).padStart(12)}  ${f.where}`;
+        process.stdout.write(`   ${teal(String(i + 1).padStart(2))}  ${name}   ${dim(meta)}\n`);
       });
       process.stdout.write("\n");
       const pick = await ask(rl, `  Pick a number ${dim("[1]")}, or paste a full path: `, "1");
