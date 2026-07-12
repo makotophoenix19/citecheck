@@ -44,6 +44,9 @@ export interface Analysis {
   doiTotal?: number;
   doiFound?: number;
   doiFoundPct?: number;
+  verdict: "pass" | "review" | "rerun"; // the at-a-glance stamp
+  verdictLabel: string;                 // "PASS" | "REVIEW NEEDED" | "RE-RUN"
+  verdictDetail: string;                // one line explaining the stamp
   headline: string;
   meaning: string[];
   actions: string[];
@@ -138,6 +141,25 @@ export function analyze(citations: CitationCheckResult[], sourceItems?: CslItemD
   const verifiedTotal = buckets.clean + buckets.yearTolerated;
   const metadataMismatch = buckets.yearMismatch + buckets.titleMismatch + buckets.review;
 
+  // ── verdict: the at-a-glance stamp ──
+  const attentionCount = buckets.notFound + retracted.length;
+  let verdict: Analysis["verdict"];
+  let verdictLabel: string;
+  let verdictDetail: string;
+  if (attentionCount > 0) {
+    verdict = "review";
+    verdictLabel = "REVIEW NEEDED";
+    verdictDetail = `${attentionCount} reference${attentionCount === 1 ? "" : "s"} need${attentionCount === 1 ? "s" : ""} a look${retracted.length ? ` (including ${retracted.length} retracted)` : ""} — see below.`;
+  } else if (buckets.unreachable > 0) {
+    verdict = "rerun";
+    verdictLabel = "RE-RUN";
+    verdictDetail = `${buckets.unreachable} reference${buckets.unreachable === 1 ? "" : "s"} couldn't be reached (network / rate limit). Re-run to finish — this is not a reference problem.`;
+  } else {
+    verdict = "pass";
+    verdictLabel = "PASS";
+    verdictDetail = "Every reference verified. Nothing needs attention.";
+  }
+
   // ── narrative (deterministic) ──
   const headline =
     buckets.notFound === 0 && retracted.length === 0
@@ -165,6 +187,7 @@ export function analyze(citations: CitationCheckResult[], sourceItems?: CslItemD
     retracted, notFound, review,
     unreachableCount: buckets.unreachable, openAccess,
     doiTotal, doiFound, doiFoundPct,
+    verdict, verdictLabel, verdictDetail,
     headline, meaning, actions,
   };
 }

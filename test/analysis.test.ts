@@ -24,6 +24,8 @@ test("analyze: root-causes each verdict into the right bucket", () => {
   expect(a.buckets).toEqual({ clean: 2, yearTolerated: 1, yearMismatch: 1, titleMismatch: 1, review: 1, notFound: 1, unreachable: 1 });
   expect(a.retracted.length).toBe(1);
   expect(a.notFound.length).toBe(1);
+  expect(a.verdict).toBe("review");
+  expect(a.verdictLabel).toBe("REVIEW NEEDED");
   expect(a.headline).toContain("3 of 8 verified");
   expect(a.headline).toContain("1 retracted");
   expect(a.actions.join(" ")).toContain("retracted");
@@ -33,8 +35,19 @@ test("analyze: root-causes each verdict into the right bucket", () => {
 
 test("analyze: a clean run says everything was located", () => {
   const a = analyze([cite({ status: "verified" }), cite({ status: "verified" })]);
+  expect(a.verdict).toBe("pass");
+  expect(a.verdictLabel).toBe("PASS");
   expect(a.headline).toContain("All 2 references were located");
   expect(a.actions.join(" ")).toContain("No action needed");
+});
+
+test("analyze: only transient failures yield a RE-RUN verdict", () => {
+  const a = analyze([
+    cite({ status: "verified" }),
+    cite({ status: "check_failed", warnings: ["Could not reach Crossref — re-run to check this reference."] }),
+  ]);
+  expect(a.verdict).toBe("rerun");
+  expect(a.verdictLabel).toBe("RE-RUN");
 });
 
 test("analyze: DOI-bearing found rate uses the source items", () => {

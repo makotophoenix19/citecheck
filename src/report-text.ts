@@ -27,8 +27,19 @@ export function renderAnalysisText(a: Analysis, color: boolean, narrative?: stri
     return lines.map((l, i) => (i === 0 ? "   " + paint(marker) + " " : indent) + l).join("\n");
   };
 
+  // Verdict stamp — reverse-video so it's unmistakable in a terminal.
+  const stampColors: Record<string, string> = {
+    pass: "\x1b[42;30m",   // green background
+    review: "\x1b[41;97m", // red background
+    rerun: "\x1b[100;97m", // grey background
+  };
+  const stamp = color
+    ? `${stampColors[a.verdict] ?? ""}  ${a.verdictLabel}  \x1b[0m`
+    : `[ ${a.verdictLabel} ]`;
+
   const out: string[] = [];
   out.push("");
+  out.push("  " + stamp + "  " + bold(a.verdictDetail));
   out.push("  " + teal("─".repeat(60)));
   out.push("  " + bold("What this means"));
   out.push("  " + bold(a.headline));

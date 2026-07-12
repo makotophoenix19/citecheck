@@ -29,6 +29,8 @@ export function renderAnalysisHtml(a: Analysis, sourceName: string, generatedAt 
         <td class="why">${esc(f.reason)}</td></tr>`).join("")
     : `<tr><td colspan="3" class="ok">Nothing needs a look — every reference was located and none were retracted.</td></tr>`;
 
+  const verdictBadge = `<div class="verdict verdict-${a.verdict}"><span class="badge">${esc(a.verdictLabel)}</span><span class="vdetail">${esc(a.verdictDetail)}</span></div>`;
+
   const narrativeBlock = narrative
     ? `<div class="brief"><div class="brief-label">In plain terms</div><p>${esc(narrative).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, " ")}</p></div>`
     : "";
@@ -48,7 +50,13 @@ export function renderAnalysisHtml(a: Analysis, sourceName: string, generatedAt 
   .eyebrow{font-size:11.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--teal);font-weight:700}
   h1{font-family:var(--serif);color:var(--ink);font-weight:600;font-size:30px;margin:8px 0 4px;line-height:1.1}
   .src{color:var(--muted);font-size:14px;margin:0 0 2px}
-  .bottomline{font-family:var(--serif);font-size:20px;color:var(--ink);font-weight:600;margin:22px 0 18px;line-height:1.25}
+  .verdict{display:flex;align-items:center;gap:12px;margin:18px 0 4px;flex-wrap:wrap}
+  .verdict .badge{display:inline-block;padding:6px 16px;border-radius:7px;font-size:15px;letter-spacing:.09em;font-weight:800;color:#fff;white-space:nowrap}
+  .verdict .vdetail{font-size:15px;font-weight:600}
+  .verdict-pass .badge{background:var(--good)} .verdict-pass .vdetail{color:var(--good)}
+  .verdict-review .badge{background:var(--flag)} .verdict-review .vdetail{color:var(--flag)}
+  .verdict-rerun .badge{background:var(--muted)} .verdict-rerun .vdetail{color:var(--muted)}
+  .bottomline{font-family:var(--serif);font-size:20px;color:var(--ink);font-weight:600;margin:14px 0 18px;line-height:1.25}
   .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin:0 0 26px}
   .tile{border:1px solid var(--rule);border-radius:11px;padding:16px 14px}
   .tile .num{font-family:var(--serif);font-size:30px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
@@ -73,6 +81,7 @@ export function renderAnalysisHtml(a: Analysis, sourceName: string, generatedAt 
 </style></head><body><div class="wrap">
   <div class="eyebrow">Reference-integrity report</div>
   <h1>${esc(sourceName)}</h1>
+  ${verdictBadge}
   <p class="bottomline">${esc(a.headline)}</p>
   ${narrativeBlock}
   <div class="tiles">${tiles}</div>

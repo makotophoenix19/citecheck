@@ -62,6 +62,20 @@ export async function writeXlsx(citations: CitationCheckResult[], a: Analysis, s
   s.getCell(row, 1).font = { color: { argb: GREY }, italic: true };
   row += 2;
 
+  // Verdict stamp — colored fill so PASS / REVIEW NEEDED is unmissable.
+  const verdictFill = ({ pass: GREEN, review: RED, rerun: GREY } as const)[a.verdict];
+  const vc = s.getCell(row, 1);
+  vc.value = a.verdictLabel;
+  vc.font = { bold: true, size: 13, color: { argb: "FFFFFFFF" } };
+  vc.fill = { type: "pattern", pattern: "solid", fgColor: { argb: verdictFill } };
+  vc.alignment = { horizontal: "center", vertical: "middle" };
+  const vd = s.getCell(row, 2);
+  vd.value = a.verdictDetail;
+  vd.font = { bold: true, color: { argb: INK } };
+  vd.alignment = { wrapText: true, vertical: "middle" };
+  s.getRow(row).height = 26;
+  row += 2;
+
   put("Bottom line", a.headline, { color: INK });
   row += 1;
 

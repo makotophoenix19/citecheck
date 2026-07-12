@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-07-12 — Houston Methodist edition
+
+### Added
+
+- **At-a-glance verdict stamp.** Every result now opens with an unmistakable
+  status: **PASS** (green — nothing to do), **REVIEW NEEDED** (red — retracted or
+  not-found references to check, with the plain-language note on what to do), or
+  **RE-RUN** (grey — only transient network failures; run it again). Shown as a
+  reverse-video badge on screen, a colored badge at the top of the HTML report,
+  and a colored cell at the top of the Excel Summary. The AI narrative is written
+  to be consistent with the verdict. Re-run after resolving items until it's a
+  clean PASS.
+
 ## [1.2.0] - 2026-07-12 — Houston Methodist edition
 
 Adds **Layer 2**: an optional, plain-language leadership briefing written by

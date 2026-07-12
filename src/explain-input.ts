@@ -7,6 +7,7 @@ import type { Analysis } from "./analysis.js";
  * never the full bibliography and never the manuscript body.
  */
 export interface ExplainInput {
+  verdict: string; // "PASS" | "REVIEW NEEDED" | "RE-RUN"
   headline: string;
   total: number;
   verified: number;
@@ -26,6 +27,7 @@ export interface ExplainInput {
 
 export function toExplainInput(a: Analysis): ExplainInput {
   return {
+    verdict: a.verdictLabel,
     headline: a.headline,
     total: a.total,
     verified: a.buckets.clean + a.buckets.yearTolerated,
