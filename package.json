@@ -1,11 +1,12 @@
 {
   "name": "citecheck",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Check whether the references in your .bib / .ris / CSL-JSON bibliography actually exist and haven't been retracted, and see which sources are in DOAJ-listed open-access journals — using Crossref, PubMed, OpenAlex and DOAJ. No API key, no signup.",
   "type": "module",
   "bin": {
     "citecheck": "dist/cli.js",
-    "citecheck-mcp": "dist/mcp.js"
+    "citecheck-mcp": "dist/mcp.js",
+    "citecheck-explain-server": "dist/explain-server.js"
   },
   "exports": {
     ".": {
@@ -63,6 +64,7 @@
     "url": "https://github.com/makotophoenix19/citecheck/issues"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.111.0",
     "@inquirer/input": "^5.1.2",
     "@inquirer/select": "^5.2.1",
     "@modelcontextprotocol/sdk": "^1.29.0",

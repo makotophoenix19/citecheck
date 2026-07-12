@@ -4,6 +4,32 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-07-12 — Houston Methodist edition
+
+Adds **Layer 2**: an optional, plain-language leadership briefing written by
+Claude on top of the deterministic analysis. It's strictly additive — with no
+route configured, nothing changes and you get the Layer-1 analysis as before.
+
+### Added
+
+- **AI narrative layer.** When a route is configured, the wizard offers "Add a
+  plain-language leadership summary?" and writes the result into the on-screen
+  output, the HTML report (an "In plain terms" callout), and the Excel Summary
+  tab.
+- **Endpoint-agnostic client** (`src/explain-client.ts`): prefers
+  `CITECHECK_EXPLAIN_URL` (a service you host — e.g. the NAS over Tailscale, so
+  the API key never touches a laptop), else falls back to a direct Claude call
+  when `ANTHROPIC_API_KEY` is set (fast local iteration). Same code path either
+  way; if neither is set it silently returns nothing.
+- **Narrative generator** (`src/explain.ts`, Anthropic SDK, `claude-opus-4-8`)
+  and a **privacy-bounded payload** (`src/explain-input.ts`) — only aggregate
+  counts and the **titles** of flagged references (published, public metadata)
+  are ever sent; never the bibliography or the manuscript.
+- **The explain-service** (`src/explain-server.ts`, new `citecheck-explain-server`
+  bin) — a tiny HTTP endpoint (`POST /explain`, `GET /health`, optional bearer
+  token) that holds the key and calls Claude. `explain-service/` ships a
+  Dockerfile, a docker-compose, and a Portainer deploy guide for the QNAP.
+
 ## [1.1.0] - 2026-07-11 — Houston Methodist edition
 
 Answers the "okay, so what do we do with this?" question. Every run now produces

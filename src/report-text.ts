@@ -2,7 +2,7 @@ import type { Analysis } from "./analysis.js";
 
 /** Render the analysis as a colored terminal block: headline, what it means,
  * what to do, and the short list of items that actually need attention. */
-export function renderAnalysisText(a: Analysis, color: boolean): string {
+export function renderAnalysisText(a: Analysis, color: boolean, narrative?: string): string {
   const p = (code: string, s: string) => (color ? `${code}${s}\x1b[0m` : s);
   const bold = (s: string) => p("\x1b[1m", s);
   const dim = (s: string) => p("\x1b[2m", s);
@@ -33,6 +33,13 @@ export function renderAnalysisText(a: Analysis, color: boolean): string {
   out.push("  " + bold("What this means"));
   out.push("  " + bold(a.headline));
   out.push("");
+  if (narrative) {
+    out.push("  " + teal("In plain terms"));
+    for (const line of narrative.split("\n")) {
+      if (line.trim()) out.push(bullet(" ", line.trim(), teal));
+    }
+    out.push("");
+  }
   for (const m of a.meaning) out.push(bullet("•", m, teal));
   out.push("");
   out.push("  " + bold("What to do"));

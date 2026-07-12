@@ -15,6 +15,7 @@ import { analyze } from "./analysis.js";
 import { renderAnalysisText } from "./report-text.js";
 import { renderAnalysisHtml } from "./report-html.js";
 import { writeXlsx } from "./report-xlsx.js";
+import { getNarrative, explainRouteConfigured, explainRouteLabel } from "./explain-client.js";
 import type { CslItemData } from "./types.js";
 
 // ── small color helpers (for the summary; the menus are styled by Inquirer) ──
@@ -155,6 +156,18 @@ export async function runWizard(): Promise<number> {
     });
     if (strict) process.env.CITECHECK_STRICT = "1";
 
+    // 3a ── optional AI leadership summary (only if a route is configured) ----
+    let wantSummary = false;
+    if (explainRouteConfigured()) {
+      wantSummary = await select<boolean>({
+        message: `Add a plain-language leadership summary? (written by ${explainRouteLabel()})`,
+        choices: [
+          { name: "Yes — add the AI-written summary", value: true },
+          { name: "No, just the analysis", value: false },
+        ],
+      });
+    }
+
     // 3b ── how to watch it run ----------------------------------------------
     const live = await select<boolean>({
       message: "While it checks:",
@@ -169,22 +182,31 @@ export async function runWizard(): Promise<number> {
     const checked = await runCheck(filePath, live);
     if (!checked) { process.stdout.write(red("  I couldn't find any references in that file.\n")); return 2; }
 
-    // 5 ── analysis + report --------------------------------------------------
+    // 5 ── analysis + (optional) narrative + report ---------------------------
     const analysis = analyze(checked.citations, checked.items);
-    process.stdout.write(renderAnalysisText(analysis, useColor)); // the "what it means" always shows
+
+    let narrative: string | undefined;
+    if (wantSummary) {
+      process.stdout.write(dim("  Writing the plain-language summary…\n"));
+      const r = await getNarrative(analysis);
+      if (r && "narrative" in r) narrative = r.narrative;
+      else if (r && "error" in r) process.stdout.write(dim(`  (Skipped the AI summary — ${r.error})\n`));
+    }
+
+    process.stdout.write(renderAnalysisText(analysis, useColor, narrative)); // the "what it means" always shows
 
     const base = join(dirname(filePath), basename(filePath, extname(filePath)) + ".citecheck");
     const openFile = (p: string) => spawn("open", [p], { stdio: "ignore", detached: true }).on("error", () => {}).unref();
 
     if (output === "excel" || output === "all") {
       const p = base + ".xlsx";
-      await writeXlsx(checked.citations, analysis, basename(filePath), p);
+      await writeXlsx(checked.citations, analysis, basename(filePath), p, narrative);
       process.stdout.write(`  ${green("✓")} Excel workbook: ${bold(p)}\n`);
       openFile(p);
     }
     if (output === "report" || output === "all") {
       const p = base + ".html";
-      writeFileSync(p, renderAnalysisHtml(analysis, basename(filePath)));
+      writeFileSync(p, renderAnalysisHtml(analysis, basename(filePath), new Date(), narrative));
       process.stdout.write(`  ${green("✓")} One-page report: ${bold(p)}\n`);
       openFile(p);
     }

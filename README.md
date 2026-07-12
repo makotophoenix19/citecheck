@@ -82,6 +82,13 @@ attention), delivered as an on-screen summary, an **Excel workbook** (a Summary
 tab, a filterable table of every reference, and a "Needs a look" tab), and a
 **one-page HTML report** you can print to PDF for leadership.
 
+Optionally, it can add a **plain-language leadership briefing** written by Claude
+(an "In plain terms" paragraph on the report). This is off unless you configure a
+route — either a small [explain-service](./explain-service/) you host (so the API
+key stays on your server, e.g. a NAS over Tailscale) via `CITECHECK_EXPLAIN_URL`,
+or a direct `ANTHROPIC_API_KEY` for local use. Only aggregate counts and the
+titles of flagged references are ever sent — never your bibliography or document.
+
 Or check a file directly:
 
 ```sh

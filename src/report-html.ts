@@ -3,8 +3,9 @@ import type { Analysis } from "./analysis.js";
 const esc = (s: unknown) =>
   String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-/** A self-contained, print-to-PDF one-page report generated from the analysis. */
-export function renderAnalysisHtml(a: Analysis, sourceName: string, generatedAt = new Date()): string {
+/** A self-contained, print-to-PDF one-page report generated from the analysis.
+ * `narrative`, when present, is the Claude-written leadership briefing. */
+export function renderAnalysisHtml(a: Analysis, sourceName: string, generatedAt = new Date(), narrative?: string): string {
   const date = generatedAt.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   const verified = a.buckets.clean + a.buckets.yearTolerated;
   const mismatch = a.buckets.yearMismatch + a.buckets.titleMismatch + a.buckets.review;
@@ -27,6 +28,10 @@ export function renderAnalysisHtml(a: Analysis, sourceName: string, generatedAt 
         <td>${esc(f.title)}${f.doi ? `<div class="doi">${esc(f.doi)}</div>` : ""}</td>
         <td class="why">${esc(f.reason)}</td></tr>`).join("")
     : `<tr><td colspan="3" class="ok">Nothing needs a look — every reference was located and none were retracted.</td></tr>`;
+
+  const narrativeBlock = narrative
+    ? `<div class="brief"><div class="brief-label">In plain terms</div><p>${esc(narrative).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, " ")}</p></div>`
+    : "";
 
   const cosmeticNote = mismatch
     ? `<p class="cosmetic">${mismatch} more references had a minor metadata difference (publication year or title formatting) but were found — safe to ignore. The full, filterable list is in the accompanying spreadsheet.</p>`
@@ -59,6 +64,9 @@ export function renderAnalysisHtml(a: Analysis, sourceName: string, generatedAt 
   td.st{font-weight:700;white-space:nowrap} td.st.flag{color:var(--flag)}
   td.why{color:var(--muted)} .doi{font-size:11.5px;color:var(--muted);margin-top:2px}
   td.ok{color:var(--good);font-weight:600}
+  .brief{background:var(--teal-soft);border-left:3px solid var(--teal);border-radius:0 10px 10px 0;padding:14px 18px;margin:0 0 24px}
+  .brief-label{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal);font-weight:700;margin-bottom:5px}
+  .brief p{margin:0 0 8px;color:var(--ink);font-size:15px;line-height:1.5}.brief p:last-child{margin:0}
   .cosmetic{font-size:13px;color:var(--muted);margin:14px 0 0}
   footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--rule);font-size:12px;color:var(--muted);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
   @media print{ .wrap{padding:0} body{font-size:12px} }
@@ -66,6 +74,7 @@ export function renderAnalysisHtml(a: Analysis, sourceName: string, generatedAt 
   <div class="eyebrow">Reference-integrity report</div>
   <h1>${esc(sourceName)}</h1>
   <p class="bottomline">${esc(a.headline)}</p>
+  ${narrativeBlock}
   <div class="tiles">${tiles}</div>
 
   <h2>What this means</h2>

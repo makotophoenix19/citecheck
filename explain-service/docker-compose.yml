@@ -1,0 +1,23 @@
+# Deploy the citecheck explain-service on the QNAP (or any Docker host) via
+# Portainer → Stacks. Set ANTHROPIC_API_KEY (and optionally CITECHECK_EXPLAIN_TOKEN)
+# as stack environment variables / secrets — do NOT hardcode them here.
+
+services:
+  citecheck-explain:
+    build:
+      context: ..
+      dockerfile: explain-service/Dockerfile
+    # Or, if you built/pushed an image instead of building in Portainer:
+    # image: citecheck-explain:latest
+    container_name: citecheck-explain
+    restart: unless-stopped
+    ports:
+      - "8088:8088"
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?set ANTHROPIC_API_KEY in the stack env}
+      CITECHECK_EXPLAIN_TOKEN: ${CITECHECK_EXPLAIN_TOKEN:-}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8088/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

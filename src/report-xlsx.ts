@@ -36,7 +36,7 @@ function statusColor(status: string, retracted: boolean): string {
 
 /** Write an .xlsx with three tabs: Summary (the analysis), All references (a
  * filterable Excel Table), and Needs a look (only the flagged rows). */
-export async function writeXlsx(citations: CitationCheckResult[], a: Analysis, sourceName: string, outPath: string): Promise<void> {
+export async function writeXlsx(citations: CitationCheckResult[], a: Analysis, sourceName: string, outPath: string, narrative?: string): Promise<void> {
   const ExcelJS = (await import("exceljs")).default;
   const wb = new ExcelJS.Workbook();
   wb.creator = "citecheck";
@@ -64,6 +64,14 @@ export async function writeXlsx(citations: CitationCheckResult[], a: Analysis, s
 
   put("Bottom line", a.headline, { color: INK });
   row += 1;
+
+  if (narrative) {
+    put("In plain terms", "", { head: true, color: TEAL });
+    put("", narrative, { color: INK });
+    s.getCell(row - 1, 2).alignment = { wrapText: true, vertical: "top" };
+    s.getRow(row - 1).height = Math.min(160, 16 + Math.ceil(narrative.length / 90) * 15);
+    row += 1;
+  }
 
   put("The numbers", "", { head: true, color: TEAL });
   if (a.doiFound != null && a.doiTotal) put("DOI-bearing found", `${a.doiFound} of ${a.doiTotal}  (${a.doiFoundPct}%)`, { color: GREEN });
