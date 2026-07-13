@@ -10,6 +10,9 @@ import { toCsv } from "./report.js";
 import { makeProgress, verboseLine } from "./progress.js";
 import { runWizard } from "./wizard.js";
 import { loadConfig, saveMailto } from "./config.js";
+import { checkCvDocument } from "./check-cv.js";
+import { analyzeCv } from "./analyze-cv.js";
+import { renderCvText } from "./report-cv-text.js";
 
 const USE_COLOR = Boolean(process.stdout.isTTY) && !process.env.NO_COLOR;
 const c = (code: string, s: string) => (USE_COLOR ? `\x1b[${code}m${s}\x1b[0m` : s);
@@ -37,6 +40,9 @@ OPTIONS
   -w, --wizard      Guided, interactive mode (also the default with no file).
   -V, --verbose     Stream every reference and its verdict live as it's checked,
                     instead of a quiet progress counter.
+  --cv              CV mode: read a CV's publication sections, check journal
+                    articles, and treat book chapters and conference abstracts as
+                    informational (a "not found" on an abstract isn't a problem).
   --json            Print the full result as JSON (for scripts / CI).
   --csv             Print a spreadsheet-friendly CSV report (opens in Excel).
   --only-issues     Hide references that checked out clean.
@@ -72,13 +78,14 @@ interface Args {
   strict: boolean;
   wizard: boolean;
   verbose: boolean;
+  cv: boolean;
   mailto?: string;
   help: boolean;
   version: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
-  const args: Args = { json: false, csv: false, onlyIssues: false, strict: false, wizard: false, verbose: false, help: false, version: false };
+  const args: Args = { json: false, csv: false, onlyIssues: false, strict: false, wizard: false, verbose: false, cv: false, help: false, version: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     switch (a) {
@@ -88,6 +95,7 @@ function parseArgs(argv: string[]): Args {
       case "--strict": args.strict = true; break;
       case "--wizard": case "-w": args.wizard = true; break;
       case "--verbose": case "-V": args.verbose = true; break;
+      case "--cv": args.cv = true; break;
       case "--no-color": process.env.NO_COLOR = "1"; break;
       case "--mailto": args.mailto = argv[++i]; break;
       case "-h": case "--help": args.help = true; break;
@@ -308,6 +316,43 @@ async function runDocument(args: Args): Promise<number> {
   return writeSummaryAndExitCode(result.citations, false);
 }
 
+async function runCvDocument(args: Args): Promise<number> {
+  let bytes: Uint8Array;
+  try {
+    const info = await stat(args.file!);
+    if (info.size > MAX_INPUT_BYTES) { process.stderr.write(red(tooLargeMessage(info.size) + "\n")); return 2; }
+    bytes = await readFile(args.file!);
+  } catch (err) {
+    process.stderr.write(red(`Could not read ${args.file}: ${(err as Error).message}\n`));
+    return 2;
+  }
+
+  let result;
+  try {
+    process.stderr.write(dim(`Reading CV publications from ${args.file}…\n`));
+    const { opts, done } = progressFor(args.verbose);
+    result = await checkCvDocument({ bytes, filename: args.file! }, opts);
+    done();
+  } catch (err) {
+    process.stderr.write(red(`${(err as Error).message}\n`));
+    return 2;
+  }
+
+  if (result.refs.length === 0) {
+    process.stderr.write(red("No publications detected. If this is a CV, check the section headings; otherwise run without --cv.\n"));
+    return 2;
+  }
+  if (!result.sawSections) {
+    process.stdout.write("\n" + yellow("No CV publication headings found — classified references by content instead (lower confidence).\n"));
+  }
+  process.stdout.write(dim("Only each reference string is sent to Crossref/PubMed/OpenAlex/DOAJ — your CV is never uploaded or stored.\n"));
+
+  const analysis = analyzeCv(result.refs);
+  process.stdout.write(renderCvText(analysis, USE_COLOR));
+  // Exit non-zero only on a genuine journal-side problem, matching the verdict.
+  return analysis.verdict === "review" ? 1 : 0;
+}
+
 async function main(): Promise<number> {
   const args = parseArgs(process.argv.slice(2));
   if (args.version) { process.stdout.write(VERSION + "\n"); return 0; }
@@ -331,7 +376,7 @@ async function main(): Promise<number> {
   printBanner();
 
   if (args.file !== "-" && formatOf(args.file) !== null) {
-    return runDocument(args);
+    return args.cv ? runCvDocument(args) : runDocument(args);
   }
   return runStructured(args);
 }
