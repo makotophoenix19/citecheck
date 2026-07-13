@@ -337,10 +337,59 @@ export async function checkFreeTextRef(raw: string): Promise<CitationCheckResult
   return result;
 }
 
+/**
+ * Best-effort title extraction from a Vancouver-style citation, for querying
+ * PubMed. PubMed's esearch matches poorly on a full citation string — the author
+ * fragments, abbreviated journal, and page range get ANDed together and return
+ * nothing (Crossref's citation endpoint tolerates the raw string; PubMed's does
+ * not). Stripping a leading author list and the trailing "Journal. Year;vol:pages"
+ * tail leaves a clean title query. Falls back to the raw string if it can't
+ * confidently isolate a title. Exported for testing.
+ */
+export function extractQueryTitle(raw: string): string {
+  let s = raw
+    .replace(/https?:\/\/\S+/gi, " ")
+    .replace(/\bdoi:\s*\S+/gi, " ")
+    .replace(/\bpmid:?\s*\d+/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Strip a leading author list: "Surname II" units joined by commas / "and" / "&",
+  // optionally followed by "et al" and/or a group author ("… Research Group"),
+  // ending in a period before a capitalized title word.
+  const unit = "[A-Z][A-Za-zÀ-ÿ'’\\-]+\\s+(?:[A-Z]\\.?){1,3}";
+  const etal = "(?:,?\\s*et\\s+al\\.?)?";
+  const group = "(?:\\s*[;,]\\s*[A-Z][A-Za-zÀ-ÿ'’\\- ]+?(?:Group|Investigators|Consortium|Collaboration|Network|Committee))?";
+  const authorList = new RegExp(`^(?:${unit})(?:(?:,\\s*|\\s+and\\s+|\\s*&\\s*)(?:${unit}))*${etal}${group}\\.\\s+(?=[A-Z])`);
+  const m = s.match(authorList);
+  if (m) s = s.slice(m[0].length).trim();
+
+  // Drop the trailing "Journal. Year;vol:pages" tail: first any year/volume
+  // segments, then — only once a year tail confirmed we're looking at a citation
+  // — a trailing journal-abbreviation segment ("N Engl J Med", "Keio J Med").
+  const segs = s.split(/\.\s+/).map((x) => x.trim()).filter(Boolean);
+  let sawYear = false;
+  while (segs.length > 1 && /\b(19|20)\d{2}\b/.test(segs[segs.length - 1]!)) { segs.pop(); sawYear = true; }
+  if (sawYear) {
+    while (segs.length > 1 && looksLikeJournal(segs[segs.length - 1]!)) segs.pop();
+  }
+  const title = segs.join(". ").replace(/[.\s]+$/, "").trim();
+
+  return title.length >= 8 ? title : raw;
+}
+
+/** Short, journal-abbreviation-shaped segment (few words, carrying a journal
+ * hint word) — used only to peel a trailing journal name off a citation. */
+const JOURNAL_HINT = /\b(J|Med|Sci|Biol|Clin|Res|Proc|Natl|Acad|Rev|Cell|PLoS|Engl|Circ|Cardiol|Am|Eur|Int|Mol|Physiol|Lab|Ann|Nat|BMC|Stem|Transl|Rep|Metab|Immunol|Oncol|Genet|Neurol|Surg|Hematol|Blood|Nature|Science|Lancet|JAMA|NEJM|Keio|Heart|Lung|Vasc|Pathol|Chest|Kidney|Biomaterials|iScience|JACC|ASAIO)\b/;
+function looksLikeJournal(seg: string): boolean {
+  const words = seg.split(/\s+/).filter(Boolean);
+  return words.length >= 1 && words.length <= 7 && JOURNAL_HINT.test(seg);
+}
+
 /** Search PubMed for a free-text reference and return the best containment
  * match, or null. Rejects weak best-guesses the same way the Crossref path does. */
 async function bestPubmedByText(raw: string): Promise<pubmed.PubmedWork | null> {
-  const works = await pubmed.searchByText(raw, 5);
+  const works = await pubmed.searchByText(extractQueryTitle(raw), 5);
   let best: pubmed.PubmedWork | null = null;
   let bestScore = 0;
   for (const w of works) {
