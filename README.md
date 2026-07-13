@@ -115,6 +115,7 @@ cat refs.bib | citecheck -
 | --- | --- |
 | `-w, --wizard` | Guided, interactive mode: pick a file, choose options, and run. Also the default when you run `citecheck` with no file. |
 | `-V, --verbose` | Stream every reference and its verdict live as it's checked, instead of a quiet progress counter. |
+| `--cv` | **CV mode.** Read a CV's publication sections, hard-check journal articles, and treat book chapters and conference abstracts as informational (a "not found" on an abstract isn't a problem). See below. |
 | `--json` | Print the full result as JSON (for scripts / CI). |
 | `--csv` | Print a spreadsheet-friendly CSV report (opens directly in Excel). |
 | `--only-issues` | Hide references that checked out clean. |
@@ -166,6 +167,28 @@ matched your bibliography — segmentation of messy formatting is best-effort.
 Text extraction, section location, and segmentation all happen **locally**. Only each **reference string** is
 sent to the public scholarly APIs (Crossref, PubMed, OpenAlex, DOAJ). Your document — often unpublished work — is
 **never uploaded and never stored**.
+
+## Check a CV
+
+A CV is not a manuscript: it mixes **journal articles**, **book chapters**, and
+**conference presentations** — reference kinds with very different odds of being
+indexed. Run it with `--cv` (or pick "This is a CV" in the wizard) and citecheck
+reads the CV's sections, sorts references by type, and checks each appropriately:
+
+```sh
+citecheck cv.docx --cv
+```
+
+- **Journal articles** are hard-checked; a "not found" here is worth a look and
+  drives the verdict.
+- **Book chapters** are checked, but "not indexed" is shown as *informational*.
+- **Conference presentations / abstracts** are listed but not existence-checked —
+  a conference item that isn't in Crossref/PubMed is normal, not a red flag.
+
+The **PASS / REVIEW NEEDED** verdict is computed from the journal articles only
+(plus any retractions), so it reflects reality instead of flagging every abstract.
+You also get a short **publication profile** (article / chapter / presentation
+counts, year span, open-access). Reads `.docx` / `.txt` / `.md`.
 
 ## What the verdicts mean
 

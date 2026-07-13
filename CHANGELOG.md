@@ -4,6 +4,37 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-07-13 — Houston Methodist edition
+
+### Added
+
+- **CV mode** (`--cv`, or the wizard's "This is a CV" toggle). A CV mixes journal
+  articles, book chapters, and conference presentations — reference kinds with
+  very different indexing expectations. CV mode reads the CV's section structure,
+  classifies each reference by type, and checks with type-appropriate rules:
+  - **journal articles** are hard-checked; a "not found" counts toward the verdict.
+  - **book chapters** are checked, but "not indexed" is informational, not a flag.
+  - **conference presentations / abstracts** are listed but not existence-checked —
+    a conference item that isn't in Crossref/PubMed is normal, not a red flag.
+
+  The PASS / REVIEW NEEDED verdict is computed from the **journal bucket only**
+  (plus retractions across all types), so it reflects reality instead of
+  over-flagging as plain document mode did on a CV. Output is a grouped on-screen
+  report and a one-page HTML report, plus a light **publication profile** (article
+  / chapter / presentation counts, year span, open-access).
+
+  New modules: `ref-classify.ts` (type classifier), `cv-parser.ts` (section
+  walker), `check-cv.ts` (pipeline), `analyze-cv.ts` (type-aware verdict),
+  `report-cv-text.ts` / `report-cv-html.ts` (grouped reports).
+
+### Notes
+
+- Reads `.docx` / `.txt` / `.md` (PDF still on the roadmap). An Excel CV workbook
+  is planned.
+- The reference matcher is unchanged, so it can still occasionally miss a real
+  paper in a smaller journal — CV mode makes the journal verdict trustworthy to
+  *read*, not infallible.
+
 ## [1.3.0] - 2026-07-12 — Houston Methodist edition
 
 ### Added

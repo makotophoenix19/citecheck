@@ -16,6 +16,10 @@ import { renderAnalysisText } from "./report-text.js";
 import { renderAnalysisHtml } from "./report-html.js";
 import { writeXlsx } from "./report-xlsx.js";
 import { getNarrative, explainRouteConfigured, explainRouteLabel } from "./explain-client.js";
+import { checkCvDocument, type CheckCvResult } from "./check-cv.js";
+import { analyzeCv } from "./analyze-cv.js";
+import { renderCvText } from "./report-cv-text.js";
+import { renderCvHtml } from "./report-cv-html.js";
 import type { CslItemData } from "./types.js";
 
 // ── small color helpers (for the summary; the menus are styled by Inquirer) ──
@@ -135,30 +139,52 @@ export async function runWizard(): Promise<number> {
     saveStartDir(dirname(filePath)); // reopen here next time
     process.stdout.write(`  ${green("✓")} ${basename(filePath)}\n`);
 
+    // 1b ── CV or manuscript? (only meaningful for document inputs) -----------
+    const cvMode = formatOf(filePath) !== null
+      ? await select<boolean>({
+          message: "What kind of document is this?",
+          choices: [
+            { name: "A manuscript or thesis (one reference list)", value: false },
+            { name: "A CV / résumé (mixed journals, book chapters, presentations)", value: true },
+          ],
+        })
+      : false;
+
     // 2 ── output format ------------------------------------------------------
-    const output = await select<"all" | "excel" | "report" | "screen">({
-      message: "How would you like the results?",
-      choices: [
-        { name: "Everything — one-page report + Excel + on-screen (recommended)", value: "all" },
-        { name: "Excel workbook (Summary + filterable data + a flagged tab)", value: "excel" },
-        { name: "One-page report (opens in your browser; print to PDF)", value: "report" },
-        { name: "On screen only", value: "screen" },
-      ],
-    });
+    const output = cvMode
+      ? await select<"all" | "report" | "screen">({
+          message: "How would you like the results?",
+          choices: [
+            { name: "Report + on-screen (recommended)", value: "all" },
+            { name: "One-page report (opens in your browser; print to PDF)", value: "report" },
+            { name: "On screen only", value: "screen" },
+          ],
+        })
+      : await select<"all" | "excel" | "report" | "screen">({
+          message: "How would you like the results?",
+          choices: [
+            { name: "Everything — one-page report + Excel + on-screen (recommended)", value: "all" },
+            { name: "Excel workbook (Summary + filterable data + a flagged tab)", value: "excel" },
+            { name: "One-page report (opens in your browser; print to PDF)", value: "report" },
+            { name: "On screen only", value: "screen" },
+          ],
+        });
 
-    // 3 ── year matching ------------------------------------------------------
-    const strict = await select<boolean>({
-      message: "Publication-year matching",
-      choices: [
-        { name: "Normal (recommended — tolerates the usual 1-year online-vs-issue gap)", value: false },
-        { name: "Strict (exact year; re-flags many real papers)", value: true },
-      ],
-    });
-    if (strict) process.env.CITECHECK_STRICT = "1";
+    // 3 ── year matching (manuscripts only) -----------------------------------
+    if (!cvMode) {
+      const strict = await select<boolean>({
+        message: "Publication-year matching",
+        choices: [
+          { name: "Normal (recommended — tolerates the usual 1-year online-vs-issue gap)", value: false },
+          { name: "Strict (exact year; re-flags many real papers)", value: true },
+        ],
+      });
+      if (strict) process.env.CITECHECK_STRICT = "1";
+    }
 
-    // 3a ── optional AI leadership summary (only if a route is configured) ----
+    // 3a ── optional AI leadership summary (manuscripts; only if a route is configured)
     let wantSummary = false;
-    if (explainRouteConfigured()) {
+    if (!cvMode && explainRouteConfigured()) {
       wantSummary = await select<boolean>({
         message: `Add a plain-language leadership summary? (written by ${explainRouteLabel()})`,
         choices: [
@@ -177,7 +203,27 @@ export async function runWizard(): Promise<number> {
       ],
     });
 
-    // 4 ── run ----------------------------------------------------------------
+    const openFile = (p: string) => spawn("open", [p], { stdio: "ignore", detached: true }).on("error", () => {}).unref();
+
+    // 4·CV ── CV pipeline (its own run + grouped, type-aware report) -----------
+    if (cvMode) {
+      process.stdout.write("\n" + dim("  Reading the CV's publication sections. Only each reference string leaves your machine.\n\n"));
+      const result = await runCvCheck(filePath, live);
+      if (!result.refs.length) { process.stdout.write(red("  I couldn't find any publications in that CV.\n")); return 2; }
+      const cv = analyzeCv(result.refs);
+      process.stdout.write(renderCvText(cv, useColor));
+      if (output !== "screen") {
+        const p = join(dirname(filePath), basename(filePath, extname(filePath)) + ".citecheck-cv.html");
+        writeFileSync(p, renderCvHtml(cv, basename(filePath)));
+        process.stdout.write(`  ${green("✓")} CV report: ${bold(p)}\n`);
+        openFile(p);
+        process.stdout.write(dim("  Opening it for you…\n"));
+      }
+      process.stdout.write("\n");
+      return 0;
+    }
+
+    // 4 ── run (manuscript / bibliography) ------------------------------------
     process.stdout.write("\n" + dim("  Checking against Crossref, PubMed, OpenAlex and DOAJ. Nothing leaves your machine except each reference string.\n\n"));
     const checked = await runCheck(filePath, live);
     if (!checked) { process.stdout.write(red("  I couldn't find any references in that file.\n")); return 2; }
@@ -196,7 +242,6 @@ export async function runWizard(): Promise<number> {
     process.stdout.write(renderAnalysisText(analysis, useColor, narrative)); // the "what it means" always shows
 
     const base = join(dirname(filePath), basename(filePath, extname(filePath)) + ".citecheck");
-    const openFile = (p: string) => spawn("open", [p], { stdio: "ignore", detached: true }).on("error", () => {}).unref();
 
     if (output === "excel" || output === "all") {
       const p = base + ".xlsx";
@@ -218,6 +263,16 @@ export async function runWizard(): Promise<number> {
     if ((err as Error)?.name === "ExitPromptError") { process.stdout.write(dim("\n  Cancelled.\n")); return 0; }
     throw err;
   }
+}
+
+async function runCvCheck(filePath: string, live: boolean): Promise<CheckCvResult> {
+  const prog = makeProgress();
+  const opts = live
+    ? { onResult: (r: CitationCheckResult, d: number, t: number) => process.stdout.write("  " + verboseLine(r, d, t, useColor) + "\n") }
+    : { onProgress: prog.onProgress };
+  const result = await checkCvDocument({ bytes: readFileSync(filePath), filename: filePath }, opts);
+  if (!live) prog.done();
+  return result;
 }
 
 async function runCheck(filePath: string, live: boolean): Promise<{ citations: CitationCheckResult[]; items?: CslItemData[] } | null> {
