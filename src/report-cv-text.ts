@@ -60,7 +60,14 @@ export function renderCvText(a: CvAnalysis, color: boolean): string {
   out.push("  " + bold("Publication profile"));
   const span = a.profile.yearRange ? ` · span ${a.profile.yearRange[0]}–${a.profile.yearRange[1]}` : "";
   out.push(dim(`     ${a.profile.articles} journal articles · ${a.profile.bookChapters} book chapters · ${a.profile.presentations} presentations${span}`));
-  if (a.openAccess) out.push(dim(`     ${a.openAccess} open-access`));
+  const pos: string[] = [];
+  if (a.profile.firstAuthor) pos.push(`${a.profile.firstAuthor} first-author`);
+  if (a.profile.corresponding) pos.push(`${a.profile.corresponding} corresponding-author`);
+  if (a.openAccess) pos.push(`${a.openAccess} open-access`);
+  if (pos.length) out.push(dim(`     ${pos.join(" · ")}`));
+  for (const d of a.profile.duplicates.slice(0, 5)) {
+    out.push(amber(`     ⚠ listed ${d.count}× (possible duplicate): ${d.title.slice(0, 54)}`));
+  }
 
   out.push(rule);
   out.push("");

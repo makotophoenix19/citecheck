@@ -1,4 +1,5 @@
 import { describeRef } from "./analysis.js";
+import { detectOwner, isFirstAuthor, isCorresponding, findDuplicates, refTitle } from "./cv-profile.js";
 import type { TypedCitation } from "./check-cv.js";
 
 /**
@@ -25,7 +26,16 @@ export interface CvAnalysis {
   verdict: "pass" | "review" | "rerun";
   verdictLabel: string;
   verdictDetail: string;
-  profile: { articles: number; bookChapters: number; presentations: number; yearRange: [number, number] | null };
+  profile: {
+    articles: number;
+    bookChapters: number;
+    presentations: number;
+    yearRange: [number, number] | null;
+    owner?: string;
+    firstAuthor: number; // journal articles where the CV owner is first author
+    corresponding: number; // references marked "corresponding author"
+    duplicates: { title: string; count: number }[];
+  };
 }
 
 function flag(tc: TypedCitation): CvFlag {
@@ -54,11 +64,20 @@ export function analyzeCv(typed: TypedCitation[]): CvAnalysis {
   let openAccess = 0;
   const years: number[] = [];
 
+  // Publication-profile signals.
+  const owner = detectOwner(typed.map((tc) => tc.citation.sourceRef || ""));
+  let firstAuthor = 0;
+  let corresponding = 0;
+  const titles: string[] = [];
+
   for (const tc of typed) {
     const r = tc.citation;
     if (r.retracted) retracted.push(flag(tc));
     if (r.journalStatus === "doaj_listed" || r.openalexMatch?.isOa === true) openAccess++;
     years.push(...yearsIn(r.sourceRef || r.title || ""));
+    if (owner && tc.type === "journal" && isFirstAuthor(r.sourceRef || "", owner)) firstAuthor++;
+    if (isCorresponding(r.sourceRef || "")) corresponding++;
+    titles.push(refTitle(r.title, r.sourceRef || ""));
 
     if (tc.type === "journal" || tc.type === "unknown") {
       journal.total++;
@@ -110,6 +129,10 @@ export function analyzeCv(typed: TypedCitation[]): CvAnalysis {
       bookChapters: book.total,
       presentations: presentation.total,
       yearRange: years.length ? [Math.min(...years), Math.max(...years)] : null,
+      owner,
+      firstAuthor,
+      corresponding,
+      duplicates: findDuplicates(titles),
     },
   };
 }
