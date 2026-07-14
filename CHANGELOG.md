@@ -27,12 +27,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   walker), `check-cv.ts` (pipeline), `analyze-cv.ts` (type-aware verdict),
   `report-cv-text.ts` / `report-cv-html.ts` (grouped reports).
 
+### Fixed
+
+- **PubMed rescue queries the extracted title, not the full citation.** A
+  biomedical reference with no DOI whose journal is thinly indexed in Crossref
+  (so Crossref returns the wrong papers) is now rescued via PubMed — its search
+  works once given a clean title instead of the whole citation string. Fixes a
+  real miss (*Ann Clin Lab Sci* 2023;53(5):800-805, PMID 37945013). Precision is
+  unchanged: the containment scorer still gates every hit.
+- For small bibliographies (≤100 refs) the rescue also fires when Crossref returns
+  **nothing at all**, catching PubMed-only papers; larger bibliographies keep the
+  fast near-miss-only behavior so outbound HTTP stays bounded. On the Crossref-
+  empty path only a verified-grade PubMed match is accepted, so a fabrication
+  can't soften to a benign mismatch.
+
 ### Notes
 
 - Reads `.docx` / `.txt` / `.md` (PDF still on the roadmap). An Excel CV workbook
   is planned.
-- The reference matcher is unchanged, so it can still occasionally miss a real
-  paper in a smaller journal — CV mode makes the journal verdict trustworthy to
+- The matcher can still occasionally miss a real paper in a very small journal
+  absent from both indexes — CV mode makes the journal verdict trustworthy to
   *read*, not infallible.
 
 ## [1.3.0] - 2026-07-12 — Houston Methodist edition

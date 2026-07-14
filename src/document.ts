@@ -1,7 +1,7 @@
 import { extractDocumentText, formatOf } from "./ingest/index.js";
 import { locateBibliography } from "./references/locate-section.js";
 import { segmentReferences } from "./references/segment.js";
-import { checkFreeTextRef } from "./references/match.js";
+import { checkFreeTextRef, DEEP_PUBMED_MAX_REFS } from "./references/match.js";
 import type { QuickCheckResult, CitationCheckResult, CheckOptions } from "./quick-check.js";
 
 export interface DocumentExtraction {
@@ -104,9 +104,10 @@ export async function checkDocument(
 
   const citations: CitationCheckResult[] = [];
   const batchSize = 10;
+  const deepPubmed = refs.length <= DEEP_PUBMED_MAX_REFS;
   for (let i = 0; i < refs.length; i += batchSize) {
     const batch = refs.slice(i, i + batchSize);
-    const batchResults = await Promise.all(batch.map(checkFreeTextRef));
+    const batchResults = await Promise.all(batch.map((r) => checkFreeTextRef(r, deepPubmed)));
     for (const r of batchResults) {
       citations.push(r);
       opts?.onResult?.(r, citations.length, refs.length);

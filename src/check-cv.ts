@@ -1,6 +1,6 @@
 import { extractDocumentText, formatOf } from "./ingest/index.js";
 import { segmentReferences } from "./references/segment.js";
-import { checkFreeTextRef } from "./references/match.js";
+import { checkFreeTextRef, DEEP_PUBMED_MAX_REFS } from "./references/match.js";
 import { parseCv } from "./cv-parser.js";
 import { classifyRef, type RefType } from "./ref-classify.js";
 import { MAX_REFS, MAX_INPUT_BYTES, tooLargeMessage } from "./document.js";
@@ -49,9 +49,10 @@ export async function checkCvDocument(
 
   const refs: TypedCitation[] = [];
   const batchSize = 10;
+  const deepPubmed = use.length <= DEEP_PUBMED_MAX_REFS;
   for (let i = 0; i < use.length; i += batchSize) {
     const batch = use.slice(i, i + batchSize);
-    const results = await Promise.all(batch.map((r) => checkFreeTextRef(r.text)));
+    const results = await Promise.all(batch.map((r) => checkFreeTextRef(r.text, deepPubmed)));
     for (let j = 0; j < results.length; j++) {
       refs.push({ citation: results[j]!, type: batch[j]!.type });
       opts?.onResult?.(results[j]!, refs.length, use.length);

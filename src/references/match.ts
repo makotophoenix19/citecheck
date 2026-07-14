@@ -194,9 +194,19 @@ async function enrichOpenAlex(result: CitationCheckResult, doi: string): Promise
   }
 }
 
+/**
+ * Small enough for the aggressive "Crossref found nothing → still try PubMed"
+ * rescue. Above this a document keeps the fast near-miss-only escalation, so a
+ * large not-found-heavy bibliography can't fan out into hundreds of throttled
+ * NCBI searches (bounded outbound HTTP is a load-bearing invariant).
+ */
+export const DEEP_PUBMED_MAX_REFS = 100;
+
 /** Check a single free-text reference string against Crossref, then PubMed as a
- * biomedical rescue. Produces a CitationCheckResult. */
-export async function checkFreeTextRef(raw: string): Promise<CitationCheckResult> {
+ * biomedical rescue. `deepPubmed` allows the PubMed rescue to fire even when
+ * Crossref returned nothing at all — set by the caller only for small
+ * bibliographies. Produces a CitationCheckResult. */
+export async function checkFreeTextRef(raw: string, deepPubmed = false): Promise<CitationCheckResult> {
   const result: CitationCheckResult = {
     key: "",
     title: "",
@@ -255,13 +265,15 @@ export async function checkFreeTextRef(raw: string): Promise<CitationCheckResult
     }
   }
 
-  // --- PubMed rescue --- upgrades only. A cited PMID is always verified
-  // directly (cheap). A PubMed title search is an escalation reserved for a
-  // Crossref NEAR-MISS: it fires only when Crossref returned a candidate that
-  // didn't verify — never on a reference Crossref couldn't find at all, so a
-  // large bibliography of junk/fabricated lines can't fan out into hundreds of
-  // rate-limited NCBI searches.
-  const escalateToPubmed = candidates.length > 0 && result.status !== "verified";
+  // --- PubMed rescue --- upgrades only. A cited PMID is always verified directly
+  // (cheap). A PubMed title search fires on a Crossref NEAR-MISS (a candidate that
+  // didn't verify) always, and — for small bibliographies (`deepPubmed`) — even
+  // when Crossref found NOTHING, because a biomedical paper in a thinly-indexed
+  // journal is often present in PubMed but weak/absent in Crossref (see the Ann
+  // Clin Lab Sci case). The size gate keeps a large not-found-heavy bibliography
+  // from fanning out into hundreds of throttled NCBI searches. Verified refs never
+  // escalate, so a healthy bibliography adds no PubMed calls for its clean entries.
+  const escalateToPubmed = result.status !== "verified" && (candidates.length > 0 || deepPubmed);
   if (pmid || escalateToPubmed) {
     let pmWork: pubmed.PubmedWork | null = null;
     try {
@@ -282,8 +294,13 @@ export async function checkFreeTextRef(raw: string): Promise<CitationCheckResult
       // zero overlap, so a wrong/typo'd PMID can't auto-verify.
       if (pmid && pmCont.titleContainment >= 0.5 && pmCont.surnameHit) pmVerdict = "verified";
 
+      // When Crossref returned NOTHING (the deepPubmed path), only a strong
+      // verified-grade PubMed match may rescue — a weak "partial" could be a
+      // fabrication coincidentally sharing common words with a real paper, and
+      // must stay not_found rather than soften to a benign mismatch.
+      const acceptPartial = candidates.length > 0;
       if (
-        (pmVerdict === "verified" || pmVerdict === "partial_match") &&
+        (pmVerdict === "verified" || (pmVerdict === "partial_match" && acceptPartial)) &&
         VERDICT_RANK[pmVerdict] > VERDICT_RANK[result.status]
       ) {
         result.status = pmVerdict;
