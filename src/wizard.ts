@@ -20,6 +20,7 @@ import { checkCvDocument, type CheckCvResult } from "./check-cv.js";
 import { analyzeCv } from "./analyze-cv.js";
 import { renderCvText } from "./report-cv-text.js";
 import { renderCvHtml } from "./report-cv-html.js";
+import { writeCvXlsx } from "./report-cv-xlsx.js";
 import type { CslItemData } from "./types.js";
 
 // ── small color helpers (for the summary; the menus are styled by Inquirer) ──
@@ -152,10 +153,11 @@ export async function runWizard(): Promise<number> {
 
     // 2 ── output format ------------------------------------------------------
     const output = cvMode
-      ? await select<"all" | "report" | "screen">({
+      ? await select<"all" | "excel" | "report" | "screen">({
           message: "How would you like the results?",
           choices: [
-            { name: "Report + on-screen (recommended)", value: "all" },
+            { name: "Everything — report + Excel + on-screen (recommended)", value: "all" },
+            { name: "Excel workbook (Summary + filterable references + duplicates)", value: "excel" },
             { name: "One-page report (opens in your browser; print to PDF)", value: "report" },
             { name: "On screen only", value: "screen" },
           ],
@@ -212,13 +214,20 @@ export async function runWizard(): Promise<number> {
       if (!result.refs.length) { process.stdout.write(red("  I couldn't find any publications in that CV.\n")); return 2; }
       const cv = analyzeCv(result.refs);
       process.stdout.write(renderCvText(cv, useColor));
-      if (output !== "screen") {
-        const p = join(dirname(filePath), basename(filePath, extname(filePath)) + ".citecheck-cv.html");
+      const cvBase = join(dirname(filePath), basename(filePath, extname(filePath)) + ".citecheck-cv");
+      if (output === "excel" || output === "all") {
+        const p = cvBase + ".xlsx";
+        await writeCvXlsx(cv, result.refs, basename(filePath), p);
+        process.stdout.write(`  ${green("✓")} Excel workbook: ${bold(p)}\n`);
+        openFile(p);
+      }
+      if (output === "report" || output === "all") {
+        const p = cvBase + ".html";
         writeFileSync(p, renderCvHtml(cv, basename(filePath)));
         process.stdout.write(`  ${green("✓")} CV report: ${bold(p)}\n`);
         openFile(p);
-        process.stdout.write(dim("  Opening it for you…\n"));
       }
+      if (output !== "screen") process.stdout.write(dim("  Opening it for you…\n"));
       process.stdout.write("\n");
       return 0;
     }

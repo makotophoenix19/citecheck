@@ -187,8 +187,12 @@ citecheck cv.docx --cv
 
 The **PASS / REVIEW NEEDED** verdict is computed from the journal articles only
 (plus any retractions), so it reflects reality instead of flagging every abstract.
-You also get a short **publication profile** (article / chapter / presentation
-counts, year span, open-access). Reads `.docx` / `.txt` / `.md`.
+You also get a **publication profile** — article / chapter / presentation counts,
+year span, open-access, **first-author** and **corresponding-author** counts, and
+**duplicate detection** (the same paper listed twice, e.g. an abstract and its
+full article). Output is a grouped on-screen report, a one-page HTML report, and
+an Excel workbook (filterable, type-tagged). Reads `.pdf`, `.docx`, `.txt`, `.md`
+— point it straight at a CV PDF, no conversion needed.
 
 ## What the verdicts mean
 

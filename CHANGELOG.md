@@ -4,6 +4,26 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-07-14 — Houston Methodist edition
+
+CV mode, Phase 2 — richer output and PDF input.
+
+### Added
+
+- **PDF input.** CVs (almost always PDFs) can be checked directly — no
+  convert-to-`.docx` step. Reconstructs lines from the PDF (via pdf.js's per-item
+  end-of-line flag), strips running page headers/footers, and reflows references
+  that wrap across lines back into whole citations. Reads `.pdf` via `unpdf`.
+  Works in every mode; the wizard file picker lists PDFs.
+- **Enhanced publication profile.** Detects the CV owner (the surname in the most
+  references) and reports **first-author** and **corresponding-author** counts,
+  plus **duplicate detection** — the same title listed more than once (e.g. an
+  abstract and its full article), which is easy to miss across a long CV.
+- **Excel CV workbook** (`.xlsx`): a **Summary** tab (verdict, the numbers,
+  publication profile, and any duplicates) and a filterable **All references**
+  table with a **Type** column (filter journal vs. presentation) and color-coded
+  status. Offered in the wizard's CV output alongside the report and on-screen.
+
 ## [1.4.0] - 2026-07-13 — Houston Methodist edition
 
 ### Added
