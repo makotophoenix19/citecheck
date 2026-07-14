@@ -1,11 +1,13 @@
 import type { Ingester } from "./types.js";
 import { textIngester } from "./text.js";
 import { docxIngester } from "./docx.js";
+import { pdfIngester } from "./pdf.js";
 
-const INGESTERS: Ingester[] = [docxIngester, textIngester];
+const INGESTERS: Ingester[] = [docxIngester, pdfIngester, textIngester];
 
-export function formatOf(filename: string): "docx" | "txt" | "md" | null {
+export function formatOf(filename: string): "docx" | "pdf" | "txt" | "md" | null {
   if (/\.docx$/i.test(filename)) return "docx";
+  if (/\.pdf$/i.test(filename)) return "pdf";
   if (/\.(md|markdown)$/i.test(filename)) return "md";
   if (/\.txt$/i.test(filename)) return "txt";
   return null;

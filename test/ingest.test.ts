@@ -132,7 +132,7 @@ test("formatOf maps extensions", () => {
   expect(formatOf("a.md")).toBe("md");
   expect(formatOf("a.markdown")).toBe("md");
   expect(formatOf("a.txt")).toBe("txt");
-  expect(formatOf("a.pdf")).toBeNull();
+  expect(formatOf("a.pdf")).toBe("pdf");
 });
 
 test("extractDocumentText routes a .txt through the text ingester", async () => {

@@ -126,7 +126,7 @@ export function toIssues(cits: CitationCheckResult[]): Issue[] {
 }
 
 export interface ExtractionInfo {
-  format: "docx" | "txt" | "md";
+  format: "docx" | "pdf" | "txt" | "md";
   detected: number;
   checked: number;
   confidence: "high" | "low";

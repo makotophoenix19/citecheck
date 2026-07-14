@@ -5,7 +5,7 @@ import { checkFreeTextRef, DEEP_PUBMED_MAX_REFS } from "./references/match.js";
 import type { QuickCheckResult, CitationCheckResult, CheckOptions } from "./quick-check.js";
 
 export interface DocumentExtraction {
-  format: "docx" | "txt" | "md";
+  format: "docx" | "pdf" | "txt" | "md";
   sectionFound: boolean;
   /** How many candidate references were FOUND (the true detected count, never capped). */
   referencesDetected: number;

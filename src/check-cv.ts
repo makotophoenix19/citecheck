@@ -34,7 +34,7 @@ export async function checkCvDocument(
   const text = await extractDocumentText(input);
   if (text.trim().length === 0) throw new Error(`No text could be extracted from ${input.filename}`);
 
-  const parsed = parseCv(text);
+  const parsed = parseCv(text, { reflow: format === "pdf" });
   let typed = parsed.refs;
   if (!parsed.sawSections || typed.length === 0) {
     // No recognized CV headings: segment the whole document and keep only lines

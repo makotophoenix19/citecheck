@@ -47,7 +47,7 @@ function cvHeadingKind(line: string): HeadingKind | null {
   return null;
 }
 
-export function parseCv(text: string): CvParse {
+export function parseCv(text: string, opts?: { reflow?: boolean }): CvParse {
   const lines = text.split(/\r?\n/);
   const blocks: { type: RefType | "umbrella"; lines: string[] }[] = [];
   let current: RefType | "umbrella" | null = null;
@@ -72,12 +72,49 @@ export function parseCv(text: string): CvParse {
   }
   flush();
 
+  // PDFs wrap each reference across several lines with no separator, so reflow
+  // them by citation boundaries; .docx/.txt already have one reference per line
+  // and use the proven line segmenter.
+  const segment = opts?.reflow
+    ? reflowReferences
+    : (ls: string[]) => segmentReferences(ls.join("\n"));
+
   const refs: CvRef[] = [];
   for (const b of blocks) {
     const sectionType = b.type === "umbrella" ? undefined : b.type;
-    for (const seg of segmentReferences(b.lines.join("\n"))) {
+    for (const seg of segment(b.lines)) {
       refs.push({ text: seg, type: reconcile(sectionType, classifyRef(seg)) });
     }
   }
   return { refs, sawSections };
+}
+
+/** A line that opens a reference: a numbered marker or an author-list start. A
+ * bare "N." marker must be followed by an author, so a wrapped page range
+ * ("…:35-40." → "40. Epub…") is not mistaken for a numbered list entry. */
+function startsReference(l: string): boolean {
+  return (
+    /^\s*(\[\d+\]|\(\d+\))\s*[A-Z]/.test(l) ||
+    /^\s*\d+\.\s+[A-Z][A-Za-zÀ-ÿ'’-]+\s+(?:[A-Z]\.?){1,3}[,. ]/.test(l) ||
+    /^[A-Z][A-Za-zÀ-ÿ'’-]+\s+(?:[A-Z]\.?){1,3}\s*[,.]/.test(l) ||
+    /^[A-Z][A-Za-zÀ-ÿ'’-]+\s+(?:[A-Z]\.?){1,3}\s+(?:and\s+)?[A-Z][A-Za-zÀ-ÿ'’-]+\s+[A-Z]/.test(l)
+  );
+}
+
+/** Reassemble a PDF section's wrapped lines into whole references. A new
+ * reference begins when a line starts like one AND the previous line did not end
+ * mid-list (a wrapped author list ends "…, Fukuda K," with a trailing comma;
+ * a finished citation does not). Otherwise the line continues the previous ref —
+ * a wrapped author list, a spilled title, or a trailing annotation. */
+function reflowReferences(lines: string[]): string[] {
+  const out: string[] = [];
+  for (const raw of lines) {
+    const l = raw.trim();
+    if (!l) continue;
+    const prev = out.length ? out[out.length - 1]! : null;
+    const prevMidList = prev !== null && /[,;\-–]$/.test(prev);
+    if (prev === null || (startsReference(l) && !prevMidList)) out.push(l);
+    else out[out.length - 1] = prev + " " + l;
+  }
+  return out;
 }

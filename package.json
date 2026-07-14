@@ -71,6 +71,7 @@
     "@retorquere/bibtex-parser": "^10.0.0",
     "exceljs": "^4.4.0",
     "mammoth": "^1.12.0",
+    "unpdf": "^1.6.2",
     "zod": "^3.25.0"
   },
   "devDependencies": {

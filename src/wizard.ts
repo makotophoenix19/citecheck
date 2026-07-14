@@ -31,7 +31,7 @@ const red = (s: string) => cc("\x1b[31m", s);
 const dim = (s: string) => cc("\x1b[2m", s);
 const bold = (s: string) => cc("\x1b[1m", s);
 
-const READABLE = new Set([".csv", ".bib", ".bibtex", ".ris", ".json", ".docx", ".txt", ".md"]);
+const READABLE = new Set([".csv", ".bib", ".bibtex", ".ris", ".json", ".docx", ".pdf", ".txt", ".md"]);
 
 function humanSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
