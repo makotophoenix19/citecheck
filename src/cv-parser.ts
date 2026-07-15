@@ -32,6 +32,48 @@ function headingLabel(line: string): string {
     .toLowerCase();
 }
 
+/**
+ * Heading matching is deliberately ASYMMETRIC: strict about what turns
+ * collection ON, loose about what turns it OFF. A missed stop swallows an entire
+ * non-publication section into the previous one; a missed start only skips a
+ * section. So the "on" patterns are anchored to the END of the line while the
+ * stops match on a prefix.
+ *
+ * The end-anchor is load-bearing for table-built CVs (the WCM template). A cell
+ * routinely BEGINS with a section word without being a heading:
+ *   "Books / Textbooks / Journals / Organization Name"  ← a column header
+ *   "Abstract and potential publication"                ← a mentee's project
+ * Matching either as a heading switches collection on inside a mentoring table.
+ * A real heading names its section and then only qualifies itself — with a
+ * parenthetical ("Abstracts (optional, list 10-20 best or most recent only):")
+ * or a dash subtitle ("Peer-Reviewed Publications — Pathology & Laboratory
+ * Medicine"). Both are allowed; trailing prose or a "/"-joined cell list is not.
+ */
+const END = String.raw`\s*(?:[—–]\s*.+?)?\s*(?:\(.*\))?$`;
+const rx = (body: string) => new RegExp(`^(?:${body})${END}`);
+
+const BOOK_H = rx(String.raw`book chapters?|books|monographs?|chapters?`);
+const PRESENTATION_H = rx(
+  String.raw`(?:selected |invited )?(?:presentations?|abstracts?|posters?|invited (?:talks?|lectures?)|oral presentations?|conference (?:presentations?|proceedings))`,
+);
+const JOURNAL_H = rx(String.raw`(?:peer[- ]?reviewed|original|refereed|journal)\b.*\b(?:publications?|articles?|research|papers?)`);
+const JOURNAL_H2 = rx(String.raw`publications?|refereed publications?|journal articles?|reviews and editorials|case reports?`);
+const UMBRELLA_H = rx(String.raw`bibliography|list of publications`);
+
+const STOP_H =
+  /^(education|degrees|honou?rs|awards|scholarships?|licens|certificat|examinations?|professional (membership|affiliation|service|experience|summary)|memberships?|affiliations?|clinical experience|research (&|and) supervisory|research and supervisory|teaching|educational service|postgraduate training|academic appointments?|employment|work experience|board certification|fellowships?|grants?|funding|patents?|skills|languages|personal|profile|contact|summary|objective|references|mentoring|invitations?|institutional|extramural)\b/;
+
+/** Work that is real but not database-checkable: unpublished manuscripts and
+ * non-peer-reviewed trade pieces. Checking these would flag every entry as
+ * "to confirm" — a false alarm, since nothing here is expected to be indexed. */
+const UNVERIFIABLE_H = rx(String.raw`in review.*|in preparation.*|submitted.*|non[- ]peer[- ]reviewed.*|other.*`);
+
+/** An unrecognized ALL-CAPS line is a major section heading we don't know. Treat
+ * it as a stop: better to skip a section than to swallow one. */
+function isUnknownCapsHeading(t: string): boolean {
+  return /[A-Z]{3}/.test(t) && !/[a-z]/.test(t);
+}
+
 /** Classify a line as a CV section heading, or null if it isn't one. Headings
  * sit roughly alone on a line; a reference line is long and won't match here. */
 function cvHeadingKind(line: string): HeadingKind | null {
@@ -39,11 +81,13 @@ function cvHeadingKind(line: string): HeadingKind | null {
   if (t.length === 0 || t.length > 74) return null; // headings are short; refs are long
   const label = headingLabel(line);
 
-  if (/^book chapters?\b|^books\b|^monographs?\b/.test(label)) return "book";
-  if (/^(selected |invited )?(presentations?|abstracts?|posters?|invited (talks?|lectures?)|oral presentations?|conference (presentations?|proceedings))\b/.test(label)) return "presentation";
-  if (/^(peer[- ]?reviewed|original|refereed|journal)\b.*\b(publications?|articles?|research|papers?)\b/.test(label) || /^(publications?|refereed publications?|journal articles?)\b/.test(label)) return "journal";
-  if (/^bibliography\b|^list of publications\b/.test(label)) return "umbrella";
-  if (/^(education|degrees|honou?rs|awards|scholarships?|licens|certificat|examinations?|professional (membership|affiliation|service|experience|summary)|memberships?|affiliations?|clinical experience|research (&|and) supervisory|research and supervisory|teaching|educational service|postgraduate training|academic appointments?|employment|work experience|board certification|fellowships?|grants?|funding|patents?|skills|languages|personal|profile|contact|summary|objective|references)\b/.test(label)) return "stop";
+  if (BOOK_H.test(label)) return "book";
+  if (PRESENTATION_H.test(label)) return "presentation";
+  if (JOURNAL_H.test(label) || JOURNAL_H2.test(label)) return "journal";
+  if (UMBRELLA_H.test(label)) return "umbrella";
+  if (STOP_H.test(label)) return "stop";
+  if (UNVERIFIABLE_H.test(label)) return "stop";
+  if (isUnknownCapsHeading(t)) return "stop";
   return null;
 }
 

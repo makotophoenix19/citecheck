@@ -129,3 +129,62 @@ test("parseCv: bullets are stripped on the .docx/.txt path too", () => {
   expect(refs.length).toBe(1);
   expect(refs[0]!.text.startsWith("Liu S")).toBe(true);
 });
+
+// ---------------------------------------------------------------------------
+// Table-built CVs (regression: WCM template — table cells parsed as references,
+// filling the cap so the real bibliography was truncated away → false PASS)
+// ---------------------------------------------------------------------------
+
+test("cvHeadingKind: a table cell that merely STARTS with a section word is not a heading", () => {
+  // Both lines are real WCM cells: a column header and a mentee's project.
+  const text = [
+    "MENTORING",
+    "Books / Textbooks / Journals / Organization Name",
+    "Abstract and potential publication",
+    "Tobiola Odetola, MD",
+    "01/2016- 06/2019",
+  ].join("\n");
+  const { refs } = parseCv(text);
+  expect(refs.length).toBe(0); // nothing here is a publication
+});
+
+test("parseCv: an unknown ALL-CAPS heading stops collection", () => {
+  const text = [
+    "Peer-reviewed Research Articles:",
+    "Saint Martin M, DeChristopher P, Sweeney P. A Strategy for Wellness. Acad Pathol. 2020;7:1-6.",
+    "INVITATIONS TO SPEAK/PRESENT",
+    "Pathology Department Grand Rounds",
+    "MD Anderson, Houston, Texas",
+  ].join("\n");
+  const { refs } = parseCv(text);
+  expect(refs.length).toBe(1);
+  expect(refs[0]!.text).toContain("A Strategy for Wellness");
+});
+
+test("cvHeadingKind: a heading may carry a dash subtitle or a parenthetical", () => {
+  const text = [
+    "Peer-Reviewed Publications — Pathology & Laboratory Medicine",
+    "Fujita J, Smith A. A Paper Title Here. Ann Clin Lab Sci. 2023;53(5):800-805.",
+    "Abstracts (optional, list 10-20 best or most recent only):",
+    "Someone A. A Poster Title. Annual Meeting of the Society. 2021.",
+  ].join("\n");
+  const { refs } = parseCv(text);
+  expect(refs.length).toBe(2);
+  expect(refs[0]!.type).toBe("journal");
+  expect(refs[1]!.type).toBe("presentation");
+});
+
+test("parseCv: unpublished and non-peer-reviewed sections are excluded, not flagged", () => {
+  // These can never verify; checking them would flag every entry as "to confirm".
+  const text = [
+    "Peer-reviewed Research Articles:",
+    "Real A, Author B. A Published Paper. J Med. 2020;1(1):1-5.",
+    "In review (manuscripts submitted or in preparation – list separately):",
+    "Demystifying Apheresis Myths for Non-Apheresis Providers. (In preparation).",
+    "Non-peer-reviewed Research Publications:",
+    "Saint Martin M. Wellness: A New Kind of Best Practice. The Pathologist. 2018 Aug;4(8):32-33.",
+  ].join("\n");
+  const { refs } = parseCv(text);
+  expect(refs.length).toBe(1);
+  expect(refs[0]!.text).toContain("A Published Paper");
+});

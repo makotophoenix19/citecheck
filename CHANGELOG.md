@@ -4,6 +4,40 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.2] - 2026-07-14
+
+### Fixed
+
+- **CV mode: table-built CVs (the WCM template) parsed table cells as
+  references.** Heading detection matched any short line *starting* with a
+  section word, so two ordinary table cells switched collection on inside
+  non-publication sections: `Books / Textbooks / Journals / Organization Name`
+  (a column header) and `Abstract and potential publication` (a mentee's
+  project). Nothing switched it off, because `MENTORING`, `INVITATIONS TO
+  SPEAK/PRESENT`, and `RESEARCH` were not recognized as headings. The 200-ref cap
+  then filled with mentoring rows and invited talks, and the real bibliography —
+  further down the file — was truncated away entirely. A CV with ~20 real
+  publications reported "PASS — all 0 journal articles verified" over 187
+  "book chapters" like `Dates (yyyy-yyyy)`.
+
+  Heading matching is now deliberately asymmetric: **strict about what turns
+  collection on, loose about what turns it off.** A missed stop swallows a whole
+  section; a missed start only skips one.
+  - "On" patterns are anchored to the end of the line, allowing only a
+    self-qualifier: a parenthetical (`Abstracts (optional, list 10-20 best):`) or
+    a dash subtitle (`Peer-Reviewed Publications — Pathology & Laboratory
+    Medicine`). Trailing prose or a `/`-joined cell list no longer matches.
+  - An unrecognized ALL-CAPS line is treated as a major heading and stops
+    collection.
+  - Unpublished and non-indexed sections (`In review`, `In preparation`,
+    `Non-peer-reviewed…`, `Other (media, podcasts…)`) are excluded rather than
+    checked — every entry would otherwise be flagged "to confirm", a false alarm.
+  - Recognizes more real bibliography subsections: `Reviews and Editorials` and
+    `Case Reports` (journal), `Chapters` (book).
+
+  Saint Martin CV: 200 table cells / 0 journal articles → 31 references
+  (15 journal, 2 books, 14 presentations). Liu holds at 18; Fujita at 64/5/43.
+
 ## [1.5.1] - 2026-07-14
 
 ### Fixed
