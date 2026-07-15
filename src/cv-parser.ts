@@ -100,10 +100,14 @@ const UNVERIFIABLE_H = rx(String.raw`in review|in preparation|submitted\b.*|non[
  * how a table cell ("Abstract and potential publication") would sneak in. */
 const PUB_WORD = /\b(?:publication|bibliograph|abstract|presentation|poster|manuscript|article|book|chapter|peer[- ]?review|refereed|journal|paper)/i;
 
-/** An ALL-CAPS line is unambiguously a section heading — a cell or a sentence is
- * not shouted. */
+/** An ALL-CAPS line is a section heading — but only if it is WORDS. A wrapped
+ * citation tail has no lowercase either ("PMID: 35070478.",
+ * "10.1080/10428194.2022.2140285. PMID: 36346368."), and reading one as a heading
+ * STOPS collection mid-bibliography: it cost one CV every reference after its
+ * first. Digits disqualify — section headings don't carry them, citation tails
+ * are made of them. */
 function isCapsHeading(t: string): boolean {
-  return /[A-Z]{3}/.test(t) && !/[a-z]/.test(t);
+  return /[A-Z]{3}/.test(t) && !/[a-z]/.test(t) && !/\d/.test(t);
 }
 
 /** Classify a line as a CV section heading, or null if it isn't one. Headings
@@ -222,16 +226,28 @@ function startsReference(l: string): boolean {
  * break. */
 function reflowReferences(lines: string[]): string[] {
   const out: string[] = [];
+  // A numbered bibliography counts UP, so the sequence itself identifies a real
+  // marker. This accepts any author format after the number ("2. Ghazaleh
+  // Eskandari, …", full first names, which no author pattern below matches)
+  // while still rejecting a wrapped page range that only looks like one
+  // ("…:35-40." → "40. Epub 2012…"): 40 is not the next number. The first
+  // numbered line seen sets the sequence, so a section numbered 65-99 works too.
+  let expect: number | null = null;
   for (const raw of lines) {
     const l = raw.trim();
     if (!l) continue;
     const bulleted = BULLET_RE.test(l);
     const text = bulleted ? stripBullet(l) : l;
     if (!text) continue;
+    const m = /^(\d+)\.\s+\S/.exec(text);
+    const n = m ? Number(m[1]) : null;
+    const numbered = n !== null && (expect === null || n === expect);
     const prev = out.length ? out[out.length - 1]! : null;
     const prevMidList = prev !== null && /[,;\-–]$/.test(prev);
-    if (prev === null || bulleted || (startsReference(text) && !prevMidList)) out.push(text);
-    else out[out.length - 1] = prev + " " + text;
+    if (prev === null || bulleted || numbered || (startsReference(text) && !prevMidList)) {
+      out.push(text);
+      if (numbered) expect = n! + 1;
+    } else out[out.length - 1] = prev + " " + text;
   }
   return out;
 }

@@ -249,3 +249,36 @@ test("cvHeadingKind: a joined presentation noun may carry its own qualifier", ()
   expect(refs.length).toBe(1);
   expect(refs[0]!.type).toBe("presentation");
 });
+
+test("reflow: an ALL-CAPS citation tail is not a heading and must not stop collection", () => {
+  // "PMID: 35070478." has no lowercase, so the caps rule read it as an unknown
+  // section heading and stopped — one CV lost every reference after its first.
+  const text = [
+    "Articles in Peer-Reviewed Journals",
+    "1. Wongworawat Y, Eskandari G. A Paper About Leukemia. Leuk Lymphoma. 2022 Nov 8;1-6. doi:",
+    "10.1080/10428194.2022.2140285. PMID: 36346368.",
+    "2. Eskandari G, Subedi S. Implementing flowDensity. J Pathol Inform. 2021 Dec 9;12:49.",
+    "PMID: 35070478.",
+    "3. Long SW, Olsen RJ. Molecular Architecture of Early Dissemination. mBio. 2020;11(6).",
+  ].join("\n");
+  const { refs } = parseCv(text, { reflow: true });
+  expect(refs.length).toBe(3);
+  expect(refs[2]!.text).toContain("Molecular Architecture");
+});
+
+test("reflow: sequential numbering opens a reference; an out-of-sequence number does not", () => {
+  // Accepts any author format after the marker (full first names match no author
+  // pattern), while still rejecting a wrapped page range: "…35-40." → "40. Epub…"
+  const text = [
+    "Publications",
+    "1. Ghazaleh Eskandari, Sishir Subedi, Paul Christensen. A Full-First-Name Paper.",
+    "J Pathol Inform. 2021;12:49.",
+    "2. Someone Else, Another Person. A Second Paper. J Med. 2020;1(1):35-40.",
+    "40. Epub 2012 Jan 3.",
+    "3. Third Author Here. A Third Paper. Nature. 2019;5(2):10-20.",
+  ].join("\n");
+  const { refs } = parseCv(text, { reflow: true });
+  expect(refs.length).toBe(3); // "40. Epub" folded into ref 2, not a 4th ref
+  expect(refs[1]!.text).toContain("Epub 2012");
+  expect(refs[2]!.text).toContain("A Third Paper");
+});
