@@ -6,9 +6,12 @@ const esc = (s: unknown) =>
 /** A self-contained, print-to-PDF one-page CV publications report. The verdict
  * reflects the journal articles; book chapters and presentations are shown for
  * information (a conference abstract that isn't indexed is normal, not a flag). */
-export function renderCvHtml(a: CvAnalysis, sourceName: string, generatedAt = new Date()): string {
+export function renderCvHtml(a: CvAnalysis, sourceName: string, generatedAt = new Date(), narrative?: string): string {
   const date = generatedAt.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   const badge = `<div class="verdict verdict-${a.verdict}"><span class="badge">${esc(a.verdictLabel)}</span><span class="vdetail">${esc(a.verdictDetail)}</span></div>`;
+  const narrativeBlock = narrative
+    ? `<div class="brief"><div class="brief-label">In plain terms</div><p>${esc(narrative).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, " ")}</p></div>`
+    : "";
 
   const span = a.profile.yearRange ? `${a.profile.yearRange[0]}–${a.profile.yearRange[1]}` : "—";
   const tile = (num: string, label: string, tone = "plain") =>
@@ -59,6 +62,9 @@ export function renderCvHtml(a: CvAnalysis, sourceName: string, generatedAt = ne
   .verdict-pass .badge{background:var(--good)} .verdict-pass .vdetail{color:var(--good)}
   .verdict-review .badge{background:var(--flag)} .verdict-review .vdetail{color:var(--flag)}
   .verdict-rerun .badge{background:var(--muted)} .verdict-rerun .vdetail{color:var(--muted)}
+  .brief{background:var(--teal-soft);border-left:3px solid var(--teal);border-radius:0 10px 10px 0;padding:14px 18px;margin:0 0 22px}
+  .brief-label{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal);font-weight:700;margin-bottom:5px}
+  .brief p{margin:0 0 8px;color:var(--ink);font-size:15px;line-height:1.5}.brief p:last-child{margin:0}
   .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:12px;margin:0 0 26px}
   .tile{border:1px solid var(--rule);border-radius:11px;padding:15px 14px}
   .tile .num{font-family:var(--serif);font-size:26px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
@@ -79,6 +85,7 @@ export function renderCvHtml(a: CvAnalysis, sourceName: string, generatedAt = ne
   <div class="eyebrow">CV publications check</div>
   <h1>${esc(sourceName)}</h1>
   ${badge}
+  ${narrativeBlock}
   <div class="tiles">${tiles}</div>
 
   <h2>Peer-reviewed journal articles · ${j.total}</h2>

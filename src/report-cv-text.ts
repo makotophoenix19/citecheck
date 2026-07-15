@@ -3,7 +3,7 @@ import type { CvAnalysis } from "./analyze-cv.js";
 /** Render a CV publications check as a grouped, colored terminal block. The
  * verdict reflects the journal articles only; books and presentations are
  * shown for information. */
-export function renderCvText(a: CvAnalysis, color: boolean): string {
+export function renderCvText(a: CvAnalysis, color: boolean, narrative?: string): string {
   const p = (code: string, s: string) => (color ? `${code}${s}\x1b[0m` : s);
   const bold = (s: string) => p("\x1b[1m", s);
   const dim = (s: string) => p("\x1b[2m", s);
@@ -20,6 +20,12 @@ export function renderCvText(a: CvAnalysis, color: boolean): string {
   out.push("");
   out.push("  " + stamp + "  " + bold(a.verdictDetail));
   out.push(rule);
+
+  if (narrative) {
+    out.push("  " + teal("In plain terms"));
+    for (const para of narrative.split("\n")) if (para.trim()) out.push("  " + para.trim());
+    out.push(rule);
+  }
 
   // Journal articles — the bucket the verdict is built from.
   const j = a.journal;

@@ -38,7 +38,7 @@ function rowFor(tc: TypedCitation): string[] {
 /** Write a CV publications workbook: a Summary tab (verdict + profile), a
  * filterable All-references table (with a Type column so you can filter journal
  * vs presentation), and a Possible-duplicates tab when any exist. */
-export async function writeCvXlsx(a: CvAnalysis, refs: TypedCitation[], sourceName: string, outPath: string): Promise<void> {
+export async function writeCvXlsx(a: CvAnalysis, refs: TypedCitation[], sourceName: string, outPath: string, narrative?: string): Promise<void> {
   const ExcelJS = (await import("exceljs")).default;
   const wb = new ExcelJS.Workbook();
   wb.creator = "citecheck";
@@ -76,6 +76,14 @@ export async function writeCvXlsx(a: CvAnalysis, refs: TypedCitation[], sourceNa
   vd.alignment = { wrapText: true, vertical: "middle" };
   s.getRow(row).height = 26;
   row += 2;
+
+  if (narrative) {
+    put("In plain terms", "", { head: true, color: TEAL });
+    put("", narrative, { color: INK });
+    s.getCell(row - 1, 2).alignment = { wrapText: true, vertical: "top" };
+    s.getRow(row - 1).height = Math.min(160, 16 + Math.ceil(narrative.length / 80) * 15);
+    row += 1;
+  }
 
   put("The numbers", "", { head: true, color: TEAL });
   put("Journal articles", `${a.journal.total}  (${a.journal.verified} verified, ${a.journal.notFound.length} to confirm, ${a.journal.mismatch} minor mismatch)`, { color: INK });

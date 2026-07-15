@@ -1,5 +1,6 @@
 import type { Analysis } from "./analysis.js";
-import { toExplainInput } from "./explain-input.js";
+import type { CvAnalysis } from "./analyze-cv.js";
+import { toExplainInput, toCvExplainInput, type ExplainInput, type CvExplainInput } from "./explain-input.js";
 
 /**
  * Endpoint-agnostic narrative fetcher. Same behavior, two routes:
@@ -25,8 +26,15 @@ export function explainRouteLabel(): string {
 }
 
 export async function getNarrative(analysis: Analysis): Promise<NarrativeResult> {
-  const input = toExplainInput(analysis);
+  return runExplain(toExplainInput(analysis));
+}
 
+/** CV publication-record narrative (same routing, CV-shaped payload + prompt). */
+export async function getCvNarrative(analysis: CvAnalysis): Promise<NarrativeResult> {
+  return runExplain(toCvExplainInput(analysis));
+}
+
+async function runExplain(input: ExplainInput | CvExplainInput): Promise<NarrativeResult> {
   const url = process.env.CITECHECK_EXPLAIN_URL?.trim();
   if (url) {
     try {

@@ -23,6 +23,13 @@ CV mode, Phase 2 — richer output and PDF input.
   publication profile, and any duplicates) and a filterable **All references**
   table with a **Type** column (filter journal vs. presentation) and color-coded
   status. Offered in the wizard's CV output alongside the report and on-screen.
+- **AI summary for CVs.** The wizard's "Add a plain-language summary?" now works in
+  CV mode too, via the same explain route (NAS over Tailscale, or a local key). It
+  uses a CV-specific prompt — a summary of the *publication record* (article count,
+  first/corresponding-author, anything to confirm, duplicates) — and appears in the
+  on-screen output, the HTML report, and the Excel Summary. Same privacy bound:
+  only aggregate counts and flagged/duplicate titles are sent, never the CV body or
+  contact details. (Via the NAS service, refresh it to v1.5.0 for the CV framing.)
 
 ## [1.4.0] - 2026-07-13 — Houston Methodist edition
 

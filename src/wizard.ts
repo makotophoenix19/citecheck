@@ -15,7 +15,7 @@ import { analyze } from "./analysis.js";
 import { renderAnalysisText } from "./report-text.js";
 import { renderAnalysisHtml } from "./report-html.js";
 import { writeXlsx } from "./report-xlsx.js";
-import { getNarrative, explainRouteConfigured, explainRouteLabel } from "./explain-client.js";
+import { getNarrative, getCvNarrative, explainRouteConfigured, explainRouteLabel } from "./explain-client.js";
 import { checkCvDocument, type CheckCvResult } from "./check-cv.js";
 import { analyzeCv } from "./analyze-cv.js";
 import { renderCvText } from "./report-cv-text.js";
@@ -184,11 +184,13 @@ export async function runWizard(): Promise<number> {
       if (strict) process.env.CITECHECK_STRICT = "1";
     }
 
-    // 3a ── optional AI leadership summary (manuscripts; only if a route is configured)
+    // 3a ── optional AI summary (only if a route is configured) ---------------
     let wantSummary = false;
-    if (!cvMode && explainRouteConfigured()) {
+    if (explainRouteConfigured()) {
       wantSummary = await select<boolean>({
-        message: `Add a plain-language leadership summary? (written by ${explainRouteLabel()})`,
+        message: cvMode
+          ? `Add a plain-language summary of the publication record? (written by ${explainRouteLabel()})`
+          : `Add a plain-language leadership summary? (written by ${explainRouteLabel()})`,
         choices: [
           { name: "Yes — add the AI-written summary", value: true },
           { name: "No, just the analysis", value: false },
@@ -213,17 +215,26 @@ export async function runWizard(): Promise<number> {
       const result = await runCvCheck(filePath, live);
       if (!result.refs.length) { process.stdout.write(red("  I couldn't find any publications in that CV.\n")); return 2; }
       const cv = analyzeCv(result.refs);
-      process.stdout.write(renderCvText(cv, useColor));
+
+      let cvNarrative: string | undefined;
+      if (wantSummary) {
+        process.stdout.write(dim("  Writing the plain-language summary…\n"));
+        const r = await getCvNarrative(cv);
+        if (r && "narrative" in r) cvNarrative = r.narrative;
+        else if (r && "error" in r) process.stdout.write(dim(`  (Skipped the AI summary — ${r.error})\n`));
+      }
+
+      process.stdout.write(renderCvText(cv, useColor, cvNarrative));
       const cvBase = join(dirname(filePath), basename(filePath, extname(filePath)) + ".citecheck-cv");
       if (output === "excel" || output === "all") {
         const p = cvBase + ".xlsx";
-        await writeCvXlsx(cv, result.refs, basename(filePath), p);
+        await writeCvXlsx(cv, result.refs, basename(filePath), p, cvNarrative);
         process.stdout.write(`  ${green("✓")} Excel workbook: ${bold(p)}\n`);
         openFile(p);
       }
       if (output === "report" || output === "all") {
         const p = cvBase + ".html";
-        writeFileSync(p, renderCvHtml(cv, basename(filePath)));
+        writeFileSync(p, renderCvHtml(cv, basename(filePath), new Date(), cvNarrative));
         process.stdout.write(`  ${green("✓")} CV report: ${bold(p)}\n`);
         openFile(p);
       }
