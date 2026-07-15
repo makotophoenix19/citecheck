@@ -40,7 +40,10 @@ export const pdfIngester: Ingester = {
     const { getDocumentProxy } = await import("unpdf");
     // pdf.js requires a plain Uint8Array (it rejects a Node Buffer).
     const data = bytes instanceof Buffer ? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength) : bytes;
-    const pdf = await getDocumentProxy(data);
+    // verbosity 0 = errors only. Real-world CV PDFs emit noisy font-parsing
+    // warnings ("TT: undefined function: 21") that pdf.js recovers from on its
+    // own; they are not ours to show and they bury the actual progress output.
+    const pdf = await getDocumentProxy(data, { verbosity: 0 });
     const pageLines: string[][] = [];
     for (let p = 1; p <= pdf.numPages; p++) {
       const page = await pdf.getPage(p);

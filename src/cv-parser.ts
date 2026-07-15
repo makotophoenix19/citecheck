@@ -83,10 +83,25 @@ export function parseCv(text: string, opts?: { reflow?: boolean }): CvParse {
   for (const b of blocks) {
     const sectionType = b.type === "umbrella" ? undefined : b.type;
     for (const seg of segment(b.lines)) {
-      refs.push({ text: seg, type: reconcile(sectionType, classifyRef(seg)) });
+      // Bulleted .docx/.txt CVs keep their marker through the line segmenter; a
+      // leading "•" would otherwise reach the author-list stripper as a token.
+      const text = stripBullet(seg);
+      if (!text) continue;
+      refs.push({ text, type: reconcile(sectionType, classifyRef(text)) });
     }
   }
   return { refs, sawSections };
+}
+
+/** A list-item bullet. Many CVs mark each reference with one instead of a
+ * number, and the marker defeats every author/number pattern below. ASCII
+ * markers require a following space so a wrapped page range ("657-" → "-661.")
+ * and a footnote ("*: Co-first author.") are not mistaken for bullets. */
+const BULLET_RE = /^\s*(?:[•●○◦▪▫‣⁃∙]\s*|[*–-]\s+)/;
+
+/** Drop a leading bullet so the reference text starts at the author list. */
+export function stripBullet(l: string): string {
+  return l.replace(BULLET_RE, "").trim();
 }
 
 /** A line that opens a reference: a numbered marker or an author-list start. A
@@ -102,19 +117,29 @@ function startsReference(l: string): boolean {
 }
 
 /** Reassemble a PDF section's wrapped lines into whole references. A new
- * reference begins when a line starts like one AND the previous line did not end
- * mid-list (a wrapped author list ends "…, Fukuda K," with a trailing comma;
- * a finished citation does not). Otherwise the line continues the previous ref —
- * a wrapped author list, a spilled title, or a trailing annotation. */
+ * reference begins when the line carries a bullet, or when it starts like one
+ * AND the previous line did not end mid-list (a wrapped author list ends
+ * "…, Fukuda K," with a trailing comma; a finished citation does not).
+ * Otherwise the line continues the previous ref — a wrapped author list, a
+ * spilled title, or a trailing annotation.
+ *
+ * A bullet outranks the mid-list guard: it is an explicit structural marker, so
+ * it opens a reference even where the author pattern can't (full first names,
+ * "• Richard K. Yang, Gokce A. Toruner, …"). A line with no bullet still
+ * continues the previous one, which is what carries a reference across a page
+ * break. */
 function reflowReferences(lines: string[]): string[] {
   const out: string[] = [];
   for (const raw of lines) {
     const l = raw.trim();
     if (!l) continue;
+    const bulleted = BULLET_RE.test(l);
+    const text = bulleted ? stripBullet(l) : l;
+    if (!text) continue;
     const prev = out.length ? out[out.length - 1]! : null;
     const prevMidList = prev !== null && /[,;\-–]$/.test(prev);
-    if (prev === null || (startsReference(l) && !prevMidList)) out.push(l);
-    else out[out.length - 1] = prev + " " + l;
+    if (prev === null || bulleted || (startsReference(text) && !prevMidList)) out.push(text);
+    else out[out.length - 1] = prev + " " + text;
   }
   return out;
 }

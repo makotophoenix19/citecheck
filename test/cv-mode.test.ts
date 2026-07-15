@@ -75,3 +75,57 @@ test("analyzeCv: a retraction anywhere triggers REVIEW NEEDED", () => {
   expect(a.verdict).toBe("review");
   expect(a.retracted.length).toBe(1);
 });
+
+// ---------------------------------------------------------------------------
+// Bulleted references (regression: Liu CV parsed as ONE 5,241-char mega-ref)
+// ---------------------------------------------------------------------------
+
+test("parseCv reflow: a bullet opens a reference and is stripped from the text", () => {
+  // Full first names ("Richard K. Yang") match no author pattern — only the
+  // bullet marks the boundary, which is exactly the case that regressed.
+  const text = [
+    "PEER-REVIEWED PUBLICATIONS",
+    "• Richard K. Yang, Gokce A. Toruner, Wei Wang. CBFB Break-Apart FISH Testing: An",
+    "Analysis of 1629 AML Cases. Cancers 2021, 13, 5354.",
+    "• Liu S, Rice L, Ewton A. NK cell lymphocytosis with atypical immunophenotype in a",
+    "chronic HIV infected patient. Cytometry Part B. Nov 2020.",
+  ].join("\n");
+  const { refs } = parseCv(text, { reflow: true });
+  expect(refs.length).toBe(2);
+  expect(refs[0]!.text.startsWith("Richard K. Yang")).toBe(true); // bullet gone
+  expect(refs[0]!.text).toContain("Analysis of 1629 AML Cases"); // wrap rejoined
+  expect(refs[1]!.text.startsWith("Liu S, Rice L")).toBe(true);
+});
+
+test("parseCv reflow: an unbulleted line still carries a reference across a page break", () => {
+  const text = [
+    "PEER-REVIEWED PUBLICATIONS",
+    "• Richard K. Yang, Wei Wang, Joseph D.",
+    "Khoury, L. Jeffrey Medeiros and Guilin Tang. CBFB Break-Apart FISH Testing. Cancers 2021.",
+  ].join("\n");
+  const { refs } = parseCv(text, { reflow: true });
+  expect(refs.length).toBe(1);
+  expect(refs[0]!.text).toContain("Khoury");
+});
+
+test("parseCv reflow: a footnote marker and a wrapped page range are not bullets", () => {
+  const text = [
+    "PEER-REVIEWED PUBLICATIONS",
+    "• Wu RC*, Liu S*, Chacon JA. Detection of CD8+CD57+ T-cells. Clin Cancer Res 2012; 18(9):2465-",
+    "-77.",
+    "*: Co-first author.",
+  ].join("\n");
+  const { refs } = parseCv(text, { reflow: true });
+  expect(refs.length).toBe(1); // all three lines are ONE reference
+  expect(refs[0]!.text).toContain("Co-first author");
+});
+
+test("parseCv: bullets are stripped on the .docx/.txt path too", () => {
+  const text = [
+    "PEER-REVIEWED PUBLICATIONS",
+    "• Liu S, Riley J, Rosenberg S. Comparison of common gamma chain cytokines. J Immunother 2006; 29(3): 284-93.",
+  ].join("\n");
+  const { refs } = parseCv(text); // no reflow — line segmenter path
+  expect(refs.length).toBe(1);
+  expect(refs[0]!.text.startsWith("Liu S")).toBe(true);
+});

@@ -4,6 +4,23 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 2026-07-14
+
+### Fixed
+
+- **CV mode: bulleted reference lists parsed as a single reference.** A CV that
+  marks each publication with a bullet (`• Liu S, Rice L, Ewton A. …`) rather
+  than a number defeated every author/number pattern in the PDF reflow, so all
+  references fused into one string. A real 18-publication CV reported
+  "1 journal article verified" with a 15-year span — a false PASS, the worst
+  possible failure for a checking tool. A bullet is now an explicit reference
+  boundary that outranks the mid-list guard, and is stripped from the text on
+  both the PDF and .docx/.txt paths. ASCII markers (`*`, `-`, `–`) require a
+  following space, so a footnote (`*: Co-first author.`) and a wrapped page
+  range (`-77.`) are not mistaken for bullets.
+- PDF ingestion no longer prints pdf.js font-parsing warnings
+  (`Warning: TT: undefined function: 21`), which pdf.js recovers from itself.
+
 ## [1.5.0] - 2026-07-14 — Houston Methodist edition
 
 CV mode, Phase 2 — richer output and PDF input.
