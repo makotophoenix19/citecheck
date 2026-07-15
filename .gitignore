@@ -6,3 +6,8 @@ dist/
 .superpowers/
 results/
 *.citecheck.csv
+
+# Local run output (bibliographies + results checked against the tool)
+*-biblio.json
+*-results.json
+results.json
