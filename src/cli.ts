@@ -345,6 +345,15 @@ async function runCvDocument(args: Args): Promise<number> {
   if (!result.sawSections) {
     process.stdout.write("\n" + yellow("No CV publication headings found — classified references by content instead (lower confidence).\n"));
   }
+  // Truncation MUST be said out loud: the verdict below is computed as though the
+  // dropped references do not exist, so a silent cap turns "we checked 400 of 427"
+  // into a confident PASS over work nobody looked at.
+  if (result.truncated) {
+    const dropped = result.detected - result.checked;
+    process.stdout.write(
+      yellow(`Only the first ${result.checked} of ${result.detected} references were checked — ${dropped} were NOT checked and are not reflected in the verdict below.\n`),
+    );
+  }
   process.stdout.write(dim("Only each reference string is sent to Crossref/PubMed/OpenAlex/DOAJ — your CV is never uploaded or stored.\n"));
 
   const analysis = analyzeCv(result.refs);

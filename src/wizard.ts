@@ -214,6 +214,14 @@ export async function runWizard(): Promise<number> {
       process.stdout.write("\n" + dim("  Reading the CV's publication sections. Only each reference string leaves your machine.\n\n"));
       const result = await runCvCheck(filePath, live);
       if (!result.refs.length) { process.stdout.write(red("  I couldn't find any publications in that CV.\n")); return 2; }
+      // Say it out loud: everything below is computed as though the dropped
+      // references don't exist, so a silent cap reads as a verdict over the whole CV.
+      if (result.truncated) {
+        const dropped = result.detected - result.checked;
+        process.stdout.write(
+          "\n  " + amber(`Heads up: this CV has ${result.detected} references and I checked the first ${result.checked}. ${dropped} were NOT checked and aren't part of the result below.`) + "\n",
+        );
+      }
       const cv = analyzeCv(result.refs);
 
       let cvNarrative: string | undefined;

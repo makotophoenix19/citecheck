@@ -27,7 +27,7 @@ const load = (p) => import(pathToFileURL(join(dist, p)).href);
 
 const { extractDocumentText, formatOf } = await load("ingest/index.js");
 const { parseCv } = await load("cv-parser.js");
-const { MAX_REFS } = await load("document.js");
+const { CV_MAX_REFS } = await load("document.js");
 
 const args = process.argv.slice(2);
 const showRefs = args.includes("--refs");
@@ -76,7 +76,7 @@ function flagsFor({ refs, sawSections }) {
   // this tool exists to catch.
   if (!refs.length) f.push("ZERO-REFS");
   if (!sawSections) f.push("NO-SECTIONS"); // no publication heading recognized at all
-  if (refs.length >= MAX_REFS) f.push("TRUNCATED"); // cap hit — real refs may be cut off
+  if (refs.length >= CV_MAX_REFS) f.push("TRUNCATED"); // cap hit — real refs may be cut off
   if (lens.some((n) => n > 1200)) f.push("MEGA-REF"); // several refs fused into one
   if (refs.length && median(lens) < 45) f.push("TABLE-CELLS"); // cells, not citations
   if (refs.length && journal === 0) f.push("NO-JOURNAL"); // a CV with zero articles is odd

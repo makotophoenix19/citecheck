@@ -3,7 +3,7 @@ import { segmentReferences } from "./references/segment.js";
 import { checkFreeTextRef, DEEP_PUBMED_MAX_REFS } from "./references/match.js";
 import { parseCv } from "./cv-parser.js";
 import { classifyRef, type RefType } from "./ref-classify.js";
-import { MAX_REFS, MAX_INPUT_BYTES, tooLargeMessage } from "./document.js";
+import { CV_MAX_REFS, MAX_INPUT_BYTES, tooLargeMessage } from "./document.js";
 import type { CitationCheckResult, CheckOptions } from "./quick-check.js";
 
 export interface TypedCitation {
@@ -44,8 +44,8 @@ export async function checkCvDocument(
       .filter((r) => r.type !== "unknown");
   }
 
-  const truncated = typed.length > MAX_REFS;
-  const use = truncated ? typed.slice(0, MAX_REFS) : typed;
+  const truncated = typed.length > CV_MAX_REFS;
+  const use = truncated ? typed.slice(0, CV_MAX_REFS) : typed;
 
   const refs: TypedCitation[] = [];
   const batchSize = 10;

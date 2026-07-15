@@ -29,6 +29,17 @@ export interface CheckDocumentResult {
 export const MAX_REFS = 200;
 
 /**
+ * The same guard for CV mode, which needs a higher bar. 200 is generous for a
+ * manuscript, where a bibliography that large is unusual enough to suggest the
+ * section was never isolated. A CV is a career: a senior faculty member with 227
+ * references is productive, not pathological — and truncating her costs 27 real
+ * publications, silently, while the verdict is computed as though they don't
+ * exist. This stays a backstop against genuinely unbounded input; it is not a
+ * statement about how much work a person is allowed to have done.
+ */
+export const CV_MAX_REFS = 400;
+
+/**
  * Reject inputs whose RAW (on-disk) byte size exceeds this, before any
  * extraction. checkDocument is a public library export, so this guard must live
  * here — not only in the CLI — or a direct caller has no input-size protection.
