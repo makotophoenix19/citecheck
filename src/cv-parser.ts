@@ -59,15 +59,29 @@ const BOOK_H = rx(String.raw`book chapters?|books|monographs?|chapters?`);
  * joined ("Abstracts and Posters"). Listing the nouns as bare alternatives is
  * what missed "Poster Presentations": it matched neither `posters?` nor
  * `presentations?` alone, because it is the two-word phrase. */
-const PRES_QUAL = String.raw`(?:selected|invited|peer[- ]reviewed|oral|poster|platform|conference|scientific|national|international|regional|local)`;
+const PRES_QUAL = String.raw`(?:selected|invited|peer[- ]reviewed|published|refereed|other|additional|oral|poster|platform|conference|scientific|national|international|regional|local)`;
 const PRES_NOUN = String.raw`(?:presentations?|abstracts?|posters?|talks?|lectures?|proceedings)`;
-const PRESENTATION_H = rx(String.raw`(?:${PRES_QUAL}\s+)*${PRES_NOUN}(?:\s*(?:and|&|/|,)\s*${PRES_NOUN})*`);
+// The joined noun may carry its own qualifier — "Posters & Oral Presentations".
+// Without that, this heading fell through to COMPOUND_H, opened an umbrella, and
+// its entries were dropped as untypable prose: 7 real posters lost from one CV.
+const PRESENTATION_H = rx(
+  String.raw`(?:${PRES_QUAL}\s+)*${PRES_NOUN}(?:\s*(?:and|&|/|,)\s*(?:${PRES_QUAL}\s+)*${PRES_NOUN})*`,
+);
 
 const JOURNAL_H = rx(String.raw`(?:peer[- ]?reviewed|original|refereed|journal)\b.*\b(?:publications?|articles?|research|papers?)`);
 const JOURNAL_H2 = rx(
   String.raw`publications?|refereed publications?|journal articles?|reviews and editorials|case reports?|(?:articles?|papers?)\s+in\s+(?:peer[- ]?reviewed|refereed)\b.*`,
 );
 const UMBRELLA_H = rx(String.raw`bibliography|list of publications`);
+
+/** A compound heading joining publication nouns: "Publications & Preprints",
+ * "Publications and Presentations". The halves may be different types, so open an
+ * umbrella and let each entry's content type it rather than guessing wrong for
+ * half the section. Only "&"/"and" joins — never "/" — and every part must be
+ * publication vocabulary, so a "/"-joined cell list ("Books / Textbooks /
+ * Journals / Organization Name") still does not match. */
+const PUB_NOUN = String.raw`(?:preprints?|publications?|presentations?|abstracts?|posters?|articles?|papers?|chapters?|books?|monographs?|manuscripts?|reviews?|editorials?|proceedings|talks?|lectures?)`;
+const COMPOUND_H = rx(String.raw`(?:${PRES_QUAL}\s+)*${PUB_NOUN}(?:\s*(?:&|and)\s+(?:${PRES_QUAL}\s+)*${PUB_NOUN})+`);
 
 const STOP_H =
   /^(education|degrees|honou?rs|awards|scholarships?|licens|certificat|examinations?|professional (membership|affiliation|service|experience|summary)|memberships?|affiliations?|clinical experience|research (&|and) supervisory|research and supervisory|teaching|educational service|postgraduate training|academic appointments?|employment|work experience|board certification|fellowships?|grants?|funding|patents?|skills|languages|personal|profile|contact|summary|objective|references|mentoring|invitations?|institutional|extramural)\b/;
@@ -98,7 +112,7 @@ function cvHeadingKind(line: string): HeadingKind | null {
   if (BOOK_H.test(label)) return "book";
   if (PRESENTATION_H.test(label)) return "presentation";
   if (JOURNAL_H.test(label) || JOURNAL_H2.test(label)) return "journal";
-  if (UMBRELLA_H.test(label)) return "umbrella";
+  if (UMBRELLA_H.test(label) || COMPOUND_H.test(label)) return "umbrella";
   if (STOP_H.test(label)) return "stop";
   if (UNVERIFIABLE_H.test(label)) return "stop";
   if (isCapsHeading(t)) {
@@ -118,8 +132,12 @@ export function parseCv(text: string, opts?: { reflow?: boolean }): CvParse {
   let sawSections = false;
   let buf: string[] = [];
 
+  // Umbrella content IS collected (its entries are typed by content below).
+  // Dropping it here silently discarded every reference under a heading we could
+  // recognize but not type — "Publications & Preprints" cost one real CV its
+  // entire peer-reviewed section, reported as zero journal articles.
   const flush = () => {
-    if (current && current !== "umbrella" && buf.length) blocks.push({ type: current, lines: buf.slice() });
+    if (current && buf.length) blocks.push({ type: current, lines: buf.slice() });
     buf = [];
   };
 
@@ -151,7 +169,13 @@ export function parseCv(text: string, opts?: { reflow?: boolean }): CvParse {
       // leading "•" would otherwise reach the author-list stripper as a token.
       const text = stripBullet(seg);
       if (!text) continue;
-      refs.push({ text, type: reconcile(sectionType, classifyRef(text)) });
+      const contentType = classifyRef(text);
+      // Under an umbrella there is no section hint, so an entry content cannot
+      // type is prose, not a reference — the template instructions that sit under
+      // "BIBLIOGRAPHY" ("Entries should follow standard journal format…"). A
+      // typed section keeps its entries either way, since the heading vouches.
+      if (!sectionType && contentType === "unknown") continue;
+      refs.push({ text, type: reconcile(sectionType, contentType) });
     }
   }
   return { refs, sawSections };

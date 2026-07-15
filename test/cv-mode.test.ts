@@ -223,3 +223,29 @@ test("cvHeadingKind: a mixed-case line with a publication word is still NOT a he
   const text = ["MENTORING", "Abstract and potential publication", "Tobiola Odetola, MD"].join("\n");
   expect(parseCv(text).refs.length).toBe(0);
 });
+
+test("parseCv: an umbrella heading COLLECTS its references (drops only prose)", () => {
+  // "Publications & Preprints" cost a real CV its entire peer-reviewed section:
+  // the heading opened an umbrella and flush() then threw the block away.
+  const text = [
+    "Publications & Preprints",
+    "Entries should follow standard journal format, listing all authors.",
+    "Real A, Author B. A Published Paper. J Med. 2020;1(1):1-5.",
+    "Other C, Author D. Another Paper. Nature. 2021;5(2):10-20.",
+  ].join("\n");
+  const { refs } = parseCv(text);
+  expect(refs.length).toBe(2); // both papers kept, the instruction line dropped
+  expect(refs.every((r) => r.type === "journal")).toBe(true);
+});
+
+test("cvHeadingKind: a joined presentation noun may carry its own qualifier", () => {
+  // "Posters & Oral Presentations" fell through to an umbrella, where its
+  // entries were dropped as untypable prose — 7 real posters lost.
+  const text = [
+    "Posters & Oral Presentations",
+    "DiScipio K, Someone A. A Poster With No Obvious Venue Words. 2021.",
+  ].join("\n");
+  const { refs } = parseCv(text);
+  expect(refs.length).toBe(1);
+  expect(refs[0]!.type).toBe("presentation");
+});
