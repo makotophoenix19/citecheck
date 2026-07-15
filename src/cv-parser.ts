@@ -89,7 +89,11 @@ const STOP_H =
 /** Work that is real but not database-checkable: unpublished manuscripts and
  * non-peer-reviewed trade pieces. Checking these would flag every entry as
  * "to confirm" — a false alarm, since nothing here is expected to be indexed. */
-const UNVERIFIABLE_H = rx(String.raw`in review.*|in preparation.*|submitted.*|non[- ]peer[- ]reviewed.*|other.*`);
+// Anchored via END, NOT ".*": "other.*" matched any line beginning with the word
+// "Other" — including a reference, and including the common heading "Other
+// Publications", which it would stop on and discard. Only the distinctive
+// multi-word phrases keep a free tail.
+const UNVERIFIABLE_H = rx(String.raw`in review|in preparation|submitted\b.*|non[- ]peer[- ]reviewed\b.*|other`);
 
 /** Publication vocabulary. Used ONLY to read an ALL-CAPS heading we have no
  * specific pattern for — never to open a section on a mixed-case line, which is
