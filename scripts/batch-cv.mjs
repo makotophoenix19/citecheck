@@ -37,16 +37,20 @@ if (!inputs.length) {
   process.exit(2);
 }
 
-/** Expand a directory into the CV files inside it. */
+/** Expand a directory into the files inside it (Word lock-files excluded). */
 function expand(p) {
   if (statSync(p).isDirectory()) {
     return readdirSync(p)
       .map((f) => join(p, f))
-      .filter((f) => statSync(f).isFile() && formatOf(f) && !basename(f).startsWith("~$"));
+      .filter((f) => statSync(f).isFile() && !basename(f).startsWith("~$") && !basename(f).startsWith("."));
   }
   return [p];
 }
-const files = inputs.flatMap(expand).filter((f) => formatOf(f));
+const all = inputs.flatMap(expand);
+const files = all.filter((f) => formatOf(f));
+// Anything we cannot read is REPORTED, never silently dropped — a corpus run
+// that quietly skips a file reads as coverage it does not have.
+const skipped = all.filter((f) => !formatOf(f));
 
 /** Template scaffolding that survived into a "reference" — a parse escaped its section. */
 const TEMPLATE = /^(n\/a|dates?\s*\(|title title|name$|institution\/location|site\/position|duplicate table|type of supervision|board \/ organization|journal \/ organization|books? \/ textbooks?|mentoring period|project\/accomplishments)/i;
@@ -66,6 +70,11 @@ function flagsFor({ refs, sawSections }) {
   const lens = refs.map((r) => r.text.length);
   const journal = refs.filter((r) => r.type === "journal").length;
 
+  // Unconditional: a CV that parsed to nothing is never "ok", whether or not a
+  // heading was recognized. Guarding this behind refs.length (as the shape flags
+  // below must be) is how an empty parse reads as clean — the same false-clean
+  // this tool exists to catch.
+  if (!refs.length) f.push("ZERO-REFS");
   if (!sawSections) f.push("NO-SECTIONS"); // no publication heading recognized at all
   if (refs.length >= MAX_REFS) f.push("TRUNCATED"); // cap hit — real refs may be cut off
   if (lens.some((n) => n > 1200)) f.push("MEGA-REF"); // several refs fused into one
@@ -113,6 +122,11 @@ for (const r of rows) {
 const bad = rows.filter((r) => r.flags.length);
 console.log("");
 console.log(`  ${rows.length} CV(s) · ${rows.length - bad.length} clean · ${bad.length} flagged`);
+
+if (skipped.length) {
+  console.log(`\n  ${skipped.length} file(s) SKIPPED — unreadable format, not checked:`);
+  for (const s of skipped) console.log(`    ${basename(s)}  (${extname(s) || "no extension"})`);
+}
 
 if (showRefs) {
   for (const r of rows) {

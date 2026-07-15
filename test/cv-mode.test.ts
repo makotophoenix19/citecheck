@@ -188,3 +188,38 @@ test("parseCv: unpublished and non-peer-reviewed sections are excluded, not flag
   expect(refs.length).toBe(1);
   expect(refs[0]!.text).toContain("A Published Paper");
 });
+
+test("cvHeadingKind: multi-word presentation headings ('Poster Presentations')", () => {
+  // Listing the nouns as bare alternatives missed the two-word phrase, so these
+  // posters were swallowed by the Publications section above and checked as
+  // journal articles — 31 false "to confirm" on one real CV.
+  const text = [
+    "Publications",
+    "Real A, Author B. A Published Paper. J Med. 2020;1(1):1-5.",
+    "Poster presentations",
+    "Someone A. A Poster Title. Annual Meeting of the Society. 2021.",
+  ].join("\n");
+  const { refs } = parseCv(text);
+  expect(refs.length).toBe(2);
+  expect(refs[0]!.type).toBe("journal");
+  expect(refs[1]!.type).toBe("presentation");
+});
+
+test("cvHeadingKind: an ALL-CAPS heading naming publications opens a section, never stops", () => {
+  // "PUBLICATIONS & PRESENTATIONS" has no specific pattern; stopping on it
+  // discarded the whole section and reported zero publications.
+  const text = [
+    "PUBLICATIONS & PRESENTATIONS",
+    "Articles in Peer-Reviewed Journals",
+    "Eskandari G, Author B. A Real Paper Title. J Med. 2020;1(1):1-5.",
+  ].join("\n");
+  const { refs } = parseCv(text);
+  expect(refs.length).toBe(1);
+  expect(refs[0]!.type).toBe("journal");
+});
+
+test("cvHeadingKind: a mixed-case line with a publication word is still NOT a heading", () => {
+  // The ALL-CAPS leniency must not extend to cells: this is the WCM mentee cell.
+  const text = ["MENTORING", "Abstract and potential publication", "Tobiola Odetola, MD"].join("\n");
+  expect(parseCv(text).refs.length).toBe(0);
+});

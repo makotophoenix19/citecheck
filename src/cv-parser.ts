@@ -53,11 +53,20 @@ const END = String.raw`\s*(?:[—–]\s*.+?)?\s*(?:\(.*\))?$`;
 const rx = (body: string) => new RegExp(`^(?:${body})${END}`);
 
 const BOOK_H = rx(String.raw`book chapters?|books|monographs?|chapters?`);
-const PRESENTATION_H = rx(
-  String.raw`(?:selected |invited )?(?:presentations?|abstracts?|posters?|invited (?:talks?|lectures?)|oral presentations?|conference (?:presentations?|proceedings))`,
-);
+
+/** Qualifier words that may precede the noun ("Poster Presentations", "Invited
+ * Talks", "Selected Oral Presentations"), and the nouns themselves, which may be
+ * joined ("Abstracts and Posters"). Listing the nouns as bare alternatives is
+ * what missed "Poster Presentations": it matched neither `posters?` nor
+ * `presentations?` alone, because it is the two-word phrase. */
+const PRES_QUAL = String.raw`(?:selected|invited|peer[- ]reviewed|oral|poster|platform|conference|scientific|national|international|regional|local)`;
+const PRES_NOUN = String.raw`(?:presentations?|abstracts?|posters?|talks?|lectures?|proceedings)`;
+const PRESENTATION_H = rx(String.raw`(?:${PRES_QUAL}\s+)*${PRES_NOUN}(?:\s*(?:and|&|/|,)\s*${PRES_NOUN})*`);
+
 const JOURNAL_H = rx(String.raw`(?:peer[- ]?reviewed|original|refereed|journal)\b.*\b(?:publications?|articles?|research|papers?)`);
-const JOURNAL_H2 = rx(String.raw`publications?|refereed publications?|journal articles?|reviews and editorials|case reports?`);
+const JOURNAL_H2 = rx(
+  String.raw`publications?|refereed publications?|journal articles?|reviews and editorials|case reports?|(?:articles?|papers?)\s+in\s+(?:peer[- ]?reviewed|refereed)\b.*`,
+);
 const UMBRELLA_H = rx(String.raw`bibliography|list of publications`);
 
 const STOP_H =
@@ -68,9 +77,14 @@ const STOP_H =
  * "to confirm" — a false alarm, since nothing here is expected to be indexed. */
 const UNVERIFIABLE_H = rx(String.raw`in review.*|in preparation.*|submitted.*|non[- ]peer[- ]reviewed.*|other.*`);
 
-/** An unrecognized ALL-CAPS line is a major section heading we don't know. Treat
- * it as a stop: better to skip a section than to swallow one. */
-function isUnknownCapsHeading(t: string): boolean {
+/** Publication vocabulary. Used ONLY to read an ALL-CAPS heading we have no
+ * specific pattern for — never to open a section on a mixed-case line, which is
+ * how a table cell ("Abstract and potential publication") would sneak in. */
+const PUB_WORD = /\b(?:publication|bibliograph|abstract|presentation|poster|manuscript|article|book|chapter|peer[- ]?review|refereed|journal|paper)/i;
+
+/** An ALL-CAPS line is unambiguously a section heading — a cell or a sentence is
+ * not shouted. */
+function isCapsHeading(t: string): boolean {
   return /[A-Z]{3}/.test(t) && !/[a-z]/.test(t);
 }
 
@@ -87,7 +101,13 @@ function cvHeadingKind(line: string): HeadingKind | null {
   if (UMBRELLA_H.test(label)) return "umbrella";
   if (STOP_H.test(label)) return "stop";
   if (UNVERIFIABLE_H.test(label)) return "stop";
-  if (isUnknownCapsHeading(t)) return "stop";
+  if (isCapsHeading(t)) {
+    // A shouted heading naming publications in a combination we have no pattern
+    // for ("PUBLICATIONS & PRESENTATIONS") opens an umbrella — let each entry's
+    // content type it. Stopping here would silently discard the whole section
+    // and report zero publications, which is the false PASS again.
+    return PUB_WORD.test(t) ? "umbrella" : "stop";
+  }
   return null;
 }
 
