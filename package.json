@@ -1,7 +1,7 @@
 {
   "name": "citecheck",
   "version": "1.5.2",
-  "description": "Check whether the references in your .bib / .ris / CSL-JSON bibliography actually exist and haven't been retracted, and see which sources are in DOAJ-listed open-access journals — using Crossref, PubMed, OpenAlex and DOAJ. No API key, no signup.",
+  "description": "Check whether the references in your .bib / .ris / CSL-JSON bibliography actually exist and haven't been retracted, and see which sources are in DOAJ-listed open-access journals \u2014 using Crossref, PubMed, OpenAlex and DOAJ. No API key, no signup.",
   "type": "module",
   "bin": {
     "citecheck": "dist/cli.js",
@@ -31,7 +31,8 @@
     "build": "tsc",
     "prepare": "tsc",
     "smoke": "node dist/cli.js --version && node dist/cli.js --help > /dev/null",
-    "test": "bun test"
+    "test": "bun test",
+    "batch-cv": "node scripts/batch-cv.mjs"
   },
   "keywords": [
     "zotero",
@@ -51,9 +52,9 @@
     "academic"
   ],
   "license": "MIT",
-  "author": "Tobias Lüscher",
+  "author": "Tobias L\u00fcscher",
   "contributors": [
-    "Brady Ware (Houston Methodist, Dept. of Pathology & Genomic Medicine) — PubMed source fork"
+    "Brady Ware (Houston Methodist, Dept. of Pathology & Genomic Medicine) \u2014 PubMed source fork"
   ],
   "repository": {
     "type": "git",
