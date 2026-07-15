@@ -49,10 +49,20 @@ export async function checkCvDocument(
 
   const refs: TypedCitation[] = [];
   const batchSize = 10;
-  const deepPubmed = use.length <= DEEP_PUBMED_MAX_REFS;
+  // The deep PubMed rescue is the expensive, high-yield path, and it only ever
+  // helps a JOURNAL article — a conference abstract is not in PubMed to be
+  // rescued. So gate it on the journal count and spend it only on journal refs.
+  //
+  // Counting every reference toward the ceiling meant a CV with 43 articles and
+  // 179 abstracts (227 total) switched the rescue OFF for exactly the references
+  // the verdict is built from — the abstracts, which could never benefit, crowded
+  // out the articles that could. Cost is unchanged: the same refs opt in, and no
+  // non-journal ref ever fires the deep path now.
+  const journalCount = use.filter((r) => r.type === "journal").length;
+  const deepPubmed = journalCount <= DEEP_PUBMED_MAX_REFS;
   for (let i = 0; i < use.length; i += batchSize) {
     const batch = use.slice(i, i + batchSize);
-    const results = await Promise.all(batch.map((r) => checkFreeTextRef(r.text, deepPubmed)));
+    const results = await Promise.all(batch.map((r) => checkFreeTextRef(r.text, deepPubmed && r.type === "journal")));
     for (let j = 0; j < results.length; j++) {
       refs.push({ citation: results[j]!, type: batch[j]!.type });
       opts?.onResult?.(results[j]!, refs.length, use.length);
