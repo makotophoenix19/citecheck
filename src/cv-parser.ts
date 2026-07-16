@@ -59,7 +59,7 @@ const BOOK_H = rx(String.raw`book chapters?|books|monographs?|chapters?`);
  * joined ("Abstracts and Posters"). Listing the nouns as bare alternatives is
  * what missed "Poster Presentations": it matched neither `posters?` nor
  * `presentations?` alone, because it is the two-word phrase. */
-const PRES_QUAL = String.raw`(?:selected|invited|peer[- ]reviewed|published|refereed|other|additional|oral|poster|platform|conference|scientific|national|international|regional|local)`;
+const PRES_QUAL = String.raw`(?:select(?:ed)?|invited|peer[- ]reviewed|published|refereed|other|additional|oral|poster|platform|conference|scientific|national|international|regional|local)`;
 const PRES_NOUN = String.raw`(?:presentations?|abstracts?|posters?|talks?|lectures?|proceedings)`;
 // The joined noun may carry its own qualifier — "Posters & Oral Presentations".
 // Without that, this heading fell through to COMPOUND_H, opened an umbrella, and
