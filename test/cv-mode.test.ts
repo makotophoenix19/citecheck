@@ -316,3 +316,32 @@ test("segmentReferences: a wrapped line still folds into its numbered entry", ()
   expect(refs.length).toBe(2);
   expect(refs[0]!.text).toContain("the line break");
 });
+
+test("reflow: a year-prefixed list splits on the year, but only in year MODE", () => {
+  // "2024  Title…" / "2021  Title…" uses the year as its marker; years don't run
+  // in sequence, so the numbered-run logic can't hold them and every entry fused.
+  const text = [
+    "SELECT PUBLISHED ABSTRACTS",
+    "2024 Gastrointestinal Manifestations as an Indicator for Severe COVID-19. The American Journal",
+    "of Gastroenterology 119(10S):p S1524, October 2024.",
+    "2021 Longitudinal Plasma Cytokine Profiles Differentiating COVID-19 Groups. Open Forum Infec-",
+    "tious Diseases 8 (Suppl 1), S320-S320.",
+    "2020 Dynamic metabolic reprogramming in innate immune cells. J Immunol 204 (1 Suppl), 150.1.",
+  ].join("\n");
+  const { refs } = parseCv(text, { reflow: true });
+  expect(refs.length).toBe(3);
+  expect(refs[1]!.text).toContain("tious Diseases"); // wrap still folded in
+});
+
+test("reflow: a wrapped citation tail opening with a year is NOT an entry boundary", () => {
+  // "2020 Nov-Dec; 11(6): e02707-20" opens exactly like a year marker. Month
+  // tails are excluded, and a lone year-start never counts without the mode.
+  const text = [
+    "Publications",
+    "1. Long SW, Olsen RJ. Molecular Architecture of Early Dissemination. mBio.",
+    "2020 Nov-Dec; 11(6): e02707-20. doi: 10.1128/mBio.02707-20. PMID: 33127862.",
+  ].join("\n");
+  const { refs } = parseCv(text, { reflow: true });
+  expect(refs.length).toBe(1);
+  expect(refs[0]!.text).toContain("PMID: 33127862");
+});

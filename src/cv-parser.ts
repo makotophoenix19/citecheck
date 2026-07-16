@@ -195,6 +195,11 @@ export function parseCv(text: string, opts?: { reflow?: boolean }): CvParse {
  * and a footnote ("*: Co-first author.") are not mistaken for bullets. */
 const BULLET_RE = /^\s*(?:[•●○◦▪▫‣⁃∙]\s*|[*–-]\s+)/;
 
+/** A year used as a list marker: "2024  Gastrointestinal Manifestations…". The
+ * month exclusion is load-bearing — "2020 Nov-Dec; 11(6):e02707-20" is a wrapped
+ * citation tail, not a new entry, and opens identically. */
+const YEAR_START = /^(?:19|20)\d{2}\s+(?!(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b)(?=[A-Z“"'])/;
+
 /** Drop a leading bullet so the reference text starts at the author list. */
 export function stripBullet(l: string): string {
   return l.replace(BULLET_RE, "").trim();
@@ -238,6 +243,16 @@ function reflowReferences(lines: string[]): string[] {
   // into its predecessor. The first marker seen starts the run, the second fixes
   // the step, and the rest must follow it — so a section numbered 65-99 works,
   // and a stray "2024 Gastrointestinal…" cannot hijack a run at 31.
+  // A year-prefixed list ("2024  Gastrointestinal Manifestations…" / "2021
+  // Longitudinal Plasma…") uses the YEAR as its marker. Years do not run in
+  // sequence, so the step logic above cannot hold them and every entry fused.
+  //
+  // A lone year-start is far too weak to trust — a wrapped citation tail opens
+  // the same way ("2020 Nov-Dec; 11(6): e02707-20"). So require the MODE, the
+  // same evidence segmentReferences demands of numbered markers: several lines in
+  // THIS block must open with one before any of them counts. Month tails are
+  // excluded outright, since that is what a wrapped citation actually looks like.
+  const yearMode = lines.filter((l) => YEAR_START.test(l.trim())).length >= 3;
   let last: number | null = null;
   let step: number | null = null;
   for (const raw of lines) {
@@ -256,9 +271,10 @@ function reflowReferences(lines: string[]): string[] {
         else if (n === last - 1) { numbered = true; step = -1; }
       } else if (n === last + step) numbered = true;
     }
+    const yearStart = yearMode && YEAR_START.test(text);
     const prev = out.length ? out[out.length - 1]! : null;
     const prevMidList = prev !== null && /[,;\-–]$/.test(prev);
-    if (prev === null || bulleted || numbered || (startsReference(text) && !prevMidList)) {
+    if (prev === null || bulleted || numbered || yearStart || (startsReference(text) && !prevMidList)) {
       out.push(text);
       if (numbered) last = n;
     } else out[out.length - 1] = prev + " " + text;
