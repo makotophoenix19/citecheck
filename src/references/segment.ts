@@ -21,10 +21,25 @@ export function segmentReferences(block: string): string[] {
         if (cur.length) entries.push(collapse(cur.join(" ")));
         cur = [line.replace(NUM_MARKER, "")];
         seenMarker = true;
-      } else if (seenMarker && line.trim()) {
-        // Only accumulate continuation lines AFTER the first marker. Any prose
-        // before the first marker (e.g. a lead-in like "The following references
-        // were consulted:") is discarded so it never becomes a phantom entry.
+      } else if (!line.trim()) {
+        // A blank line ends the paragraph, and a reference does not span a
+        // paragraph break — so it closes the current entry rather than being
+        // ignored. Without this, a list whose markers are only PARTLY present
+        // globs every unmarked reference onto the last marked one: a .doc→.docx
+        // conversion keeps hand-typed numbers ("74.") as text but drops Word's
+        // auto-numbering (it is formatting, not characters), so a real CV
+        // bibliography arrives half-marked and collapsed into a 38,000-character
+        // "reference". A wrapped line follows its entry immediately, with no
+        // blank between, so nothing legitimately wrapped is split here.
+        if (cur.length) {
+          entries.push(collapse(cur.join(" ")));
+          cur = [];
+        }
+      } else if (seenMarker) {
+        // Accumulate only AFTER the first marker. Prose before it (a lead-in like
+        // "The following references were consulted:") is discarded so it never
+        // becomes a phantom entry. After a blank line `cur` is empty, so an
+        // unmarked reference starts its own entry instead of joining the last one.
         cur.push(line);
       }
     }

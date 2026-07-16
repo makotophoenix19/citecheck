@@ -29,15 +29,21 @@ export interface CheckDocumentResult {
 export const MAX_REFS = 200;
 
 /**
- * The same guard for CV mode, which needs a higher bar. 200 is generous for a
- * manuscript, where a bibliography that large is unusual enough to suggest the
- * section was never isolated. A CV is a career: a senior faculty member with 227
- * references is productive, not pathological — and truncating her costs 27 real
- * publications, silently, while the verdict is computed as though they don't
- * exist. This stays a backstop against genuinely unbounded input; it is not a
- * statement about how much work a person is allowed to have done.
+ * The same guard for CV mode, which needs a far higher bar. 200 is generous for
+ * a manuscript, where a bibliography that large is unusual enough to suggest the
+ * section was never isolated. A CV is a career, and the ceiling has to clear the
+ * most productive real one, not the typical one: a senior faculty CV in our
+ * corpus holds 591 verified-whole references (300 journal articles, 269
+ * abstracts, 40 years). At 400 she lost 191 publications; at 227 the previous
+ * bar lost another CV 27.
+ *
+ * So this is set where no real human career reaches, and stays a backstop
+ * against genuinely unbounded input — never a statement about how much work a
+ * person is allowed to have done. Truncation is also reported out loud now (see
+ * cli.ts / wizard.ts), so hitting it can never again quietly shrink someone's
+ * record to fit our number.
  */
-export const CV_MAX_REFS = 400;
+export const CV_MAX_REFS = 1000;
 
 /**
  * Reject inputs whose RAW (on-disk) byte size exceeds this, before any

@@ -226,27 +226,41 @@ function startsReference(l: string): boolean {
  * break. */
 function reflowReferences(lines: string[]): string[] {
   const out: string[] = [];
-  // A numbered bibliography counts UP, so the sequence itself identifies a real
-  // marker. This accepts any author format after the number ("2. Ghazaleh
-  // Eskandari, …", full first names, which no author pattern below matches)
-  // while still rejecting a wrapped page range that only looks like one
-  // ("…:35-40." → "40. Epub 2012…"): 40 is not the next number. The first
-  // numbered line seen sets the sequence, so a section numbered 65-99 works too.
-  let expect: number | null = null;
+  // A numbered bibliography RUNS IN SEQUENCE, and the sequence itself is what
+  // identifies a real marker. That does the work no author pattern can: it
+  // accepts any author format after the number ("2. Ghazaleh Eskandari, …", full
+  // first names) and a marker with no period at all ("34 Richard D. Beger, …"),
+  // while still rejecting a wrapped page range that merely looks like one
+  // ("…:35-40." → "40. Epub 2012…") because 40 is not the next number.
+  //
+  // Direction is INFERRED, not assumed: a CV often numbers newest-first and
+  // counts DOWN (34, 33, 32…). Assuming ascending made every such reference fuse
+  // into its predecessor. The first marker seen starts the run, the second fixes
+  // the step, and the rest must follow it — so a section numbered 65-99 works,
+  // and a stray "2024 Gastrointestinal…" cannot hijack a run at 31.
+  let last: number | null = null;
+  let step: number | null = null;
   for (const raw of lines) {
     const l = raw.trim();
     if (!l) continue;
     const bulleted = BULLET_RE.test(l);
     const text = bulleted ? stripBullet(l) : l;
     if (!text) continue;
-    const m = /^(\d+)\.\s+\S/.exec(text);
+    const m = /^(\d+)[.)]?\s+(?=[A-Z“"'])/.exec(text);
     const n = m ? Number(m[1]) : null;
-    const numbered = n !== null && (expect === null || n === expect);
+    let numbered = false;
+    if (n !== null) {
+      if (last === null) numbered = true; // opens the run
+      else if (step === null) {
+        if (n === last + 1) { numbered = true; step = 1; }
+        else if (n === last - 1) { numbered = true; step = -1; }
+      } else if (n === last + step) numbered = true;
+    }
     const prev = out.length ? out[out.length - 1]! : null;
     const prevMidList = prev !== null && /[,;\-–]$/.test(prev);
     if (prev === null || bulleted || numbered || (startsReference(text) && !prevMidList)) {
       out.push(text);
-      if (numbered) expect = n! + 1;
+      if (numbered) last = n;
     } else out[out.length - 1] = prev + " " + text;
   }
   return out;

@@ -282,3 +282,37 @@ test("reflow: sequential numbering opens a reference; an out-of-sequence number 
   expect(refs[1]!.text).toContain("Epub 2012");
   expect(refs[2]!.text).toContain("A Third Paper");
 });
+
+test("segmentReferences: a blank line closes an entry, so a half-numbered list does not glob", () => {
+  // A .doc→.docx conversion keeps hand-typed numbers ("74.") but drops Word's
+  // auto-numbering, so a real CV arrives half-marked. Treating every unmarked
+  // reference as a continuation collapsed a bibliography into one 38,000-char
+  // "reference" — 300 real articles checked as a single string.
+  const text = [
+    "Peer-reviewed Publications",
+    "74.\tChen HI, Akpolat I, Mody DR. Increased kappa/lambda light chain ratio. Am J Clin Pathol. 2007;127(1):1-8.",
+    "",
+    "Vega-Vazquez F, Chang CC, Schwartz MR. A second paper that lost its number. Mod Pathol. 2008;21(2):100-110.",
+    "",
+    "Smith-Zagone MJ, Schwartz MR. Frozen section of skin specimens. Arch Pathol Lab Med. 2005;129:1536-1543.",
+  ].join("\n");
+  const { refs } = parseCv(text);
+  expect(refs.length).toBe(3); // not 1 giant entry
+  expect(refs[1]!.text.startsWith("Vega-Vazquez")).toBe(true);
+  expect(refs[2]!.text).toContain("Frozen section");
+});
+
+test("segmentReferences: a wrapped line still folds into its numbered entry", () => {
+  // The guard above must not split a genuine wrap, which follows its entry with
+  // no blank line between.
+  const text = [
+    "Publications",
+    "1. Chen HI, Akpolat I, Mody DR. A title that wraps across",
+    "the line break. Am J Clin Pathol. 2007;127(1):1-8.",
+    "",
+    "2. Second Author B. Another paper. Mod Pathol. 2008;21(2):100-110.",
+  ].join("\n");
+  const { refs } = parseCv(text);
+  expect(refs.length).toBe(2);
+  expect(refs[0]!.text).toContain("the line break");
+});
